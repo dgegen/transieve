@@ -43,3 +43,43 @@ print(f"Peak Z-score: {z_peak:.2f} at t = {lc.time[idx]:.3f} d")
 - **Matched-filter detection** — exact GP-inverse Z-scores with white-noise baselines
 - **Retrievability assessment** — recovery fractions, detectability depth, and sensitivity over template banks
 - **GP stability maps** — 2D scans over amplitude and timescale hyperparameters
+
+## Contributing
+
+Contributions are welcome. To get started:
+
+```bash
+git clone https://github.com/dgegen/transieve.git
+cd transieve
+uv sync --all-groups
+```
+
+Install the pre-commit hooks and run the test suite before submitting a pull request:
+
+```bash
+uv run pre-commit install
+uv run pytest
+```
+
+### Building the docs
+
+The documentation is built with [Quarto](https://quarto.org) and [quartodoc](https://machow.github.io/quartodoc). Install quarto, then run:
+
+```bash
+# Move to docs directory
+cd docs
+
+# Generate the API reference pages
+uv run quartodoc build
+
+# Render and preview the site
+quarto preview
+```
+
+To build a static copy of the site:
+
+```bash
+quarto render
+```
+
+The rendered site is written to `docs/_site/`.
