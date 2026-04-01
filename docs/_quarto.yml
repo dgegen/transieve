@@ -1,0 +1,99 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "transieve"
+  bread-crumbs: false
+  navbar:
+    search: true
+    tools:
+      - icon: github
+        href: https://github.com/dgegen/transieve
+
+  sidebar:
+    style: docked
+    search: true
+    contents:
+      - section: "Getting Started"
+        contents:
+          - href: index.qmd
+            text: Overview
+          - href: tutorials/quickstart.py
+            text: Quickstart
+      - section: "Tutorials"
+        contents:
+          - href: tutorials/gp_visualisation.py
+            text: GP Noise Modelling
+          - href: tutorials/retrievability_synthetic_demo.py
+            text: Retrievability Demo
+      - section: "API Reference"
+        contents:
+          - href: reference/index.qmd
+            text: All symbols
+          - "reference/_sidebar.yml"
+  page-footer:
+    center: "transieve v0.1.0 — David Degen, 2026"
+
+metadata-files:
+  - reference/_sidebar.yml
+
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+    syntax-highlighting: github
+    html-math-method: mathjax
+    css:
+      - reference/_styles-quartodoc.css
+    toc: true
+    toc-depth: 3
+
+execute:
+  fig-format: svg
+  freeze: auto
+
+quartodoc:
+  package: transieve
+  sidebar: reference/_sidebar.yml
+  css: reference/_styles-quartodoc.css
+
+  sections:
+    - title: "Light Curves"
+      desc: "Core data containers."
+      contents:
+        - LightCurve
+        - SimulatedLightCurve
+
+    - title: "GP Families"
+      desc: "Gaussian-process model families and fitting."
+      contents:
+        - gp.GPFamily
+        - gp.SHOGPFamily
+        - gp.ExpGPFamily
+
+    - title: "Matched Filter"
+      desc: "Template banks and matched-filter statistics."
+      contents:
+        - gp.TemplateBank
+        - gp.MatchedFilter
+        - gp.MatchedFilterStatistics
+
+    - title: "Retrievability"
+      desc: "Transit recovery and detectability assessment."
+      contents:
+        - gp.assess_retrievability
+        - gp.check_retrievability
+        - gp.RetrievabilityResult
+
+    - title: "GP Stability"
+      desc: "Hyperparameter stability maps."
+      contents:
+        - gp.scan_gp_stability_map
+        - gp.GPStabilityMap
+
+    - title: "Visualisation"
+      desc: ""
+      contents:
+        - gp.plot_covariance_matrix

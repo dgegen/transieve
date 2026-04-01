@@ -1,0 +1,48 @@
+---
+title: "transieve"
+subtitle: "Transit-signal analysis in correlated noise"
+page-layout: full
+toc: false
+---
+
+:::{.hero-banner}
+**transieve** is a research package for detecting single-transit events in stellar light curves,
+combining empirical transit models, Gaussian-process noise modelling, and matched-filter diagnostics.
+:::
+
+## Features
+
+:::{.grid}
+
+:::{.g-col-4}
+### Transit Modelling
+Empirical and limb-darkened transit models via `batman`, with a validated `LightCurve` container and synthetic light-curve generation.
+:::
+
+:::{.g-col-4}
+### GP Noise Modelling
+Fit SHO and exponential GP families with `celerite2`. Characterise correlated noise and assess hyperparameter stability with 2D scan maps.
+:::
+
+:::{.g-col-4}
+### Matched-Filter Detection
+Exact GP-inverse matched filtering with white-noise baselines. Evaluate Z-scores, recovery fractions, and detectability depth over template banks.
+:::
+
+:::
+
+## Installation
+
+Clone the repository and install in editable mode:
+
+```bash
+git clone https://github.com/dgegen/transieve.git
+cd transieve
+uv sync
+```
+
+## Learn more
+
+- [GP Noise Modelling tutorial](tutorials/gp_visualisation.py) — visualise kernel structure and matched-filter calibration
+- [Retrievability Demo](tutorials/retrievability_synthetic_demo.py) — end-to-end recovery assessment on synthetic data
+- [API Reference](reference/index.qmd) — full documentation of all public classes and functions

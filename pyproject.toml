@@ -1,0 +1,49 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.5,<0.10.0"]
+
+[dependency-groups]
+dev = [
+  {include-group = "test"},
+  "pre-commit>=4.5.1",
+  "ruff>=0.14.7"
+]
+docs = [
+  "ipython>=9.7.0",
+  "quartodoc>=0.7.0",
+  "griffe<2.0"
+]
+test = [
+  "pytest>=9.0.2"
+]
+zarr = [
+  "xarray>=2026.1.0",
+  "zarr>=3.1.5"
+]
+
+[project]
+authors = [
+  {email = "ddegen@ethz.ch", name = "dgegen"}
+]
+dependencies = [
+  "astropy>=7.2.0",
+  "batman-package>=2.5.2",
+  "celerite2>=0.3.2",
+  "ipykernel>=7.1.0",
+  "matplotlib>=3.10.7",
+  "numpy>=2.3.5",
+  "pywavelets>=1.9.0",
+  "scipy>=1.16.3"
+]
+description = "Transit-signal analysis in correlated noise."
+name = "transieve"
+readme = "README.md"
+requires-python = ">=3.12"
+version = "0.1.0"
+
+[project.urls]
+Homepage = "https://github.com/dgegen/transieve"
+Repository = "https://github.com/dgegen/transieve"
+
+[tool.ruff.lint.per-file-ignores]
+"docs/**/*.py" = ["E402"]
