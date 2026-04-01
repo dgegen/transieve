@@ -63,7 +63,7 @@ uv run pytest
 
 ### Building the docs
 
-The documentation is built with [Quarto](https://quarto.org) and [quartodoc](https://machow.github.io/quartodoc). Install quarto, then run:
+The documentation is built with [Quarto](https://quarto.org) and [quartodoc](https://machow.github.io/quartodoc). Install Quarto, then run:
 
 ```bash
 # Move to docs directory
