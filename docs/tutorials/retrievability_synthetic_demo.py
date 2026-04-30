@@ -37,7 +37,7 @@ import plotting as plm
 
 
 # %% [markdown]
-# ## 1. Build a synthetic light curve
+# ## Build a synthetic light curve
 #
 # Note: GP parameters in this package use log-parameterization (`log_omega`, `log_sigma`, `log_quality`, `log_jitter`).
 
@@ -79,7 +79,7 @@ _ = lc.plot(axes)
 
 
 # %% [markdown]
-# ## 2. Baseline retrievability with fitted GP
+# ## Baseline retrievability with fitted GP
 #
 # We fit an SHO GP and evaluate retrievability over epoch shifts using `get_monotransit_from_epoch`.
 
@@ -172,7 +172,7 @@ axes[3].set_xlabel("Template epoch [days]")
 plt.tight_layout()
 
 # %% [markdown]
-# ## 3. 2D GP stability landscape
+# ## 2D GP stability landscape
 #
 # Now we hold the transit template fixed and scan GP `sigma` and timescale (`period`) to see where detection is both strong and stable.
 
@@ -204,7 +204,8 @@ print("Summary:", summary)
 
 
 # %%
-
+# | code-fold: true
+# | code-summary: "Show plotting code"
 
 X, Y = np.meshgrid(stab.timescale_grid, stab.sigma_grid)
 
@@ -241,9 +242,10 @@ axes[0].set_ylabel("sigma")
 plt.show()
 
 # %% [markdown]
-# The fact that the plateau is a diagonal "stripe" rather than a circle confirms the covariance degeneracy. As you increase the GP's noise amplitude, you must also increase the period to maintain the same level of "filtering" on the transit signal.
+# The fact that the plateau is a diagonal "stripe" rather than a circle confirms the covariance degeneracy: As you increase the GP's noise amplitude, you must also increase the period to maintain the same level of "filtering" on the transit signal.
 #
-# This 2D sensitivity analysis reveals the fundamental trade-off between noise suppression and signal preservation in Gaussian Process filtering. The Detection Significance map (left) displays a characteristic "ridge" where the Z-score is maximized; however, the Information Retention map (right) shows that at short correlation scales (ρ) and high amplitudes (σ), the filter becomes aggressive enough to "eat" the planet signal, driving retention toward zero.
+# This 2D sensitivity analysis reveals the fundamental trade-off between noise suppression and signal preservation.
+# The Detection Significance map (left) displays a characteristic "ridge" where the Z-score is maximized; however, the Information Retention map (right) shows that at short correlation scales (ρ) and high amplitudes (σ), the filter becomes aggressive enough to "eat" the planet signal, driving retention toward zero.
 #
 # A detection is only considered physically robust if its peak significance occurs within the "Safe Harbor"—the region where Information Retention remains high (typically >80%). If the maximum Z-score only appears in the low-retention regime (bottom-left), the model is over-fitting the stellar noise at the expense of the transit. By anchoring the search to the intersection of these two metrics, we move beyond simple Likelihood maximization and instead optimize for the reliable recovery of the underlying planetary signal.
 

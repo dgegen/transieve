@@ -14,6 +14,10 @@ from transieve import SimulatedLightCurve
 from transieve.gp import SHOGPFamily, assess_retrievability
 from transieve.transit import get_monotransit_from_epoch
 
+# %%
+# | echo: false
+# | output: false
+import plotting as plt  # noqa: F811
 
 # %% [markdown]
 # ## Simulate a light curve
@@ -34,7 +38,8 @@ lc = SimulatedLightCurve.from_transit(
     multiply_signal=False,
     seed=42,
 )
-lc.plot()
+_ = lc.plot()
+
 # %% [markdown]
 # ## Build a template bank
 #
@@ -77,18 +82,15 @@ result = assess_retrievability(
 # GP noise model relative to a white-noise baseline.
 
 # %%
-fig, axes = plt.subplots(2, 1, sharex=True, figsize=(8, 4))
-axes[0].plot(result.time, result.z_score, lw=1)
-axes[0].axvline(0.0, ls="--", label="injected epoch")
-axes[0].set_ylabel("Z-score")
-axes[0].legend()
-
-axes[1].plot(result.time, result.recovery_fraction, lw=1)
-axes[1].set_ylabel("Recovery fraction")
-axes[1].set_xlabel("Epoch (days)")
+fig, ax = plt.subplots()
+ax.plot(result.time, result.z_score, lw=1)
+ax.axvline(0.0, ls="--", label="injected epoch")
+ax.set_ylabel("Z-score")
+ax.set_xlabel("Time [days]")
+ax.legend()
 
 # %%
 idx, z_peak = result.strongest_match()
 print(f"Peak Z-score:              {z_peak:.2f}")
-print(f"Epoch at peak:             {result.time[idx]:.3f} d")
+print(f"Epoch at peak:             {result.time[idx]:.3f} days")
 print(f"Recovery fraction at peak: {result.peak_recovery_fraction:.2f}")

@@ -104,6 +104,14 @@ plot_covariance_matrix(exp_gp, ax=axes[0, 1], thinning=1)
 plot_covariance_matrix(true_gp, ax=axes[1, 0], thinning=1, inverse=True)
 plot_covariance_matrix(exp_gp, ax=axes[1, 1], thinning=1, inverse=True)
 
+for ax in axes.flatten():
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
+
+# Add titles for each column
+axes[0, 0].set_title("SHO kernel")
+axes[0, 1].set_title("Exponential kernel")
+
 plt.tight_layout()
 
 # %% [markdown]
@@ -133,6 +141,31 @@ plt.tight_layout()
 # and the SNR reduces to the familiar sum $\sum_i y_i s_i / \sigma_i^2$. For correlated noise, using the correct $C^{-1}$ from the GP is essential to avoid inflated or suppressed Z-scores.
 #
 # In the code, the denominator $\sqrt{s^T C^{-1} s}$ is the **template norm** returned by `MatchedFilter.template_norm_and_projection`. It sets the scale against which the projection $y^T C^{-1} s$ is measured, so that a Z-score of 1 always means a one-sigma detection regardless of the template's amplitude or the noise level.
+
+# %% [markdown]
+# ::: {.callout-note collapse="true"}
+# ## Mathematical interpretation of the GP as a function-space metric
+#
+# While we treat $C$ simply as a covariance matrix, it is formally the "reproducing kernel" for a [Reproducing Kernel Hilbert Space (RKHS)](https://en.wikipedia.org/wiki/Reproducing_kernel_Hilbert_space), $\mathcal{H}$. This provides a deeper geometric interpretation of what happens during transit detection.
+#
+# ### What is the RKHS Norm?
+# Every kernel $k(t, t')$ defines a unique space of functions. In this space, the "complexity" or "roughness" of a function $f$ is measured by its RKHS norm,
+# $$\|f\|_{\mathcal{H}}^2 = \int f(t) k^{-1}(t, t') f(t') dt dt' \approx \sum_{i,j} f(t_i) [C^{-1}]_{ij} f(t_j) = y^T C^{-1} y$$.
+#
+#
+# For a Gaussian Process, the log-likelihood (ignoring normalization constants) is:
+# $$\ln p(\mathbf{y} \mid \theta) = -\frac{1}{2} \mathbf{y}^T C^{-1} \mathbf{y} \approx -\frac{1}{2} \|f\|_{\mathcal{H}}^2$$
+#
+# Mathematically, the inverse covariance $C^{-1}$ acts as the metric tensor for this space.
+#
+# ### In the context of transit detection
+# When we fit a GP to a light curve containing a transit, we are essentially performing a decomposition based on these norms:
+#
+# 1.  **Stellar Noise:** A good noise model (like the SHO kernel) has a **low RKHS norm** for smooth, oscillatory stellar variations. The GP "prefers" these shapes.
+# 2.  **The Transit:** A transit signal $s(t)$ usually has a **high RKHS norm** relative to the SHO kernel because its sharp ingress/egress "strains" the smooth expectations of the GP.
+#
+# > **The Risk of Misspecification:** If your kernel is too flexible (e.g., a very short timescale), the transit's RKHS norm becomes small. The GP then "sees" the transit as a low-energy noise fluctuation and absorbs it, effectively "whitening away" the planet you are trying to find.
+# :::
 
 # %%
 
@@ -165,7 +198,8 @@ whitened_flux = matched_filter.whiten(flux - 1)
 
 
 # %%
-
+# | code-fold: true
+# | code-summary: "Show plotting code"
 
 fig, axes = plm.subplots(nrows=3, sharex=True, rescale_height=0.5)
 ax = axes[0]
@@ -180,6 +214,7 @@ ax.legend(
     frameon=False,
     columnspacing=3.0,
 )
+ax.set_ylabel("Relative flux")
 
 ax = axes[1]
 ax.plot(
@@ -283,7 +318,7 @@ ax_ret = axes[2, 1]  # Bot Right: Information Retention
 
 ax_flux.plot(time, flux, marker=".", ls="", mec="None", label="Flux", color="lightgray")
 
-index_selection = np.array([0, 10, 19])
+index_selection = np.array([0, 11, 19])
 regimes = ["Overfit", "Optimal", "Underfit"]
 # regimes = index_selection
 colors = plt.get_cmap("inferno")(np.linspace(0.2, 0.8, len(index_selection)))
@@ -329,17 +364,20 @@ ax_flux.legend(
     markerscale=1,
 )
 
+axes[1, 1].set_ylim(*axes[1, 1].get_ylim() + np.array([0, 0.1]))
+axes[2, 1].set_ylim(*axes[2, 1].get_ylim() + np.array([0, 0.1]))
+
 # ax_resids.axhline(0, zorder=-1, color='black', ls='--')
 ax_resids.set_ylabel(r"$\mu_{\mathrm{ref}} - \mu_{\mathrm{scale}}$")
 
 ax_template.set_xlabel("Time [days]")
-ax_template.set_ylabel("Effective transit template")
+ax_template.set_ylabel("Effective template")
 
 ax_like.plot(scales, log_likelihoods, color="black")
 ax_like.set_ylabel(r"$\Delta \ln \mathcal{L}$", color="black")
 
 ax_snr.plot(scales, recovery_fraction[:], marker=".", color="black")
-ax_snr.set_ylabel("Detection significance")
+ax_snr.set_ylabel("Significance")
 
 ax_ret.plot(scales, relative_capacity, color="black", marker=".")
 ax_ret.set_ylabel("Information retention")
@@ -354,7 +392,7 @@ plt.subplots_adjust(
     top=0.9,
     # bottom=0.1,
     wspace=0.3,  # width
-    # hspace=0.4  # height
+    hspace=0.3,  # height
 )
 
 # %% [markdown]

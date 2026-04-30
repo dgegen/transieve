@@ -73,13 +73,13 @@ cd docs
 uv run quartodoc build
 
 # Render and preview the site
-quarto preview
+uv run quarto preview
 ```
 
 To build a static copy of the site:
 
 ```bash
-quarto render
+uv run quarto render
 ```
 
 The rendered site is written to `docs/_site/`.
