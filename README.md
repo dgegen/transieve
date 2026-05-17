@@ -71,9 +71,6 @@ cd docs
 
 # Generate the API reference pages
 uv run quartodoc build
-
-# Render and preview the site
-uv run quarto preview
 ```
 
 To build a static copy of the site:

@@ -389,7 +389,7 @@ class MatchedFilterStatistics:
 
         axes[0].plot(time, self.z_score, **kwargs)
         axes[1].plot(time, self.template_norm, **kwargs)
-        axes[2].plot(time, depth_to_threshold, label="Depth to Threshold", **kwargs)
+        axes[2].plot(time, depth_to_threshold, label="Depth to threshold", **kwargs)
         axes[2].plot(time, sensitivity, label="Sensitivity", **kwargs)
 
         if np.any(sensitivity < 0):

@@ -31,12 +31,12 @@ import plotting as plm
 
 # %%
 
-
 from transieve import SimulatedLightCurve
+from transieve.bin import plot_binned_light_curve
 
 
 planet_params = {
-    "depth": (3 / (1 * 109)) ** 2,
+    "depth": (3.5 / (1 * 109)) ** 2,
     "epoch": 0,
     "duration": 0.2,
     "period": 100,
@@ -51,6 +51,7 @@ gp_params = {
 
 lc = SimulatedLightCurve.from_transit(
     **planet_params,
+    # **planet_params | {"depth": 0},
     gp_params=gp_params,
     baseline=15,
     seed=0,
@@ -67,12 +68,20 @@ time, flux, gp_realization, true_gp, true_signal = (
 _, axes = plm.subplots(3, 1, sharex=True, rescale_height=0.4)
 _ = lc.plot(axes)
 
+plot_binned_light_curve(
+    time, gp_realization, bin_time=3 / 24, method="median", ax=axes[0], color="black"
+)
+plot_binned_light_curve(
+    time, flux, bin_time=2 / 24, method="median", ax=axes[2], color="black"
+)
+
 # %% [markdown]
 # ## Covariance structure
 #
-# The matched-filter SNR is fundamentally governed by the inverse covariance matrix, $C^{-1}$. While $C$ describes how noise points "cling" together, $C^{-1}$ encodes the instructions for pulling them apart. In the white-noise limit, $C$ and $C^{-1}$ are simply diagonal; however, for correlated stellar noise, $C^{-1}$ acts as a **whitening filter** that suppresses (de-weights) residuals matching the expected noise correlation scales.
+# The matched-filter Z-score is fundamentally governed by the inverse covariance matrix, $C^{-1}$. While $C$ describes how noise points "cling" together, $C^{-1}$ encodes the instructions for pulling them apart. In the white-noise limit, $C$ and $C^{-1}$ are simply diagonal; however, for correlated stellar noise, $C^{-1}$ acts as a **whitening filter** that suppresses (de-weights) residuals matching the expected noise correlation scales.
 #
 # Below we compare $C$ and $C^{-1}$ for:
+#
 # - the **true SHO kernel** — a stochastically-driven harmonic oscillator with $Q = 1/\sqrt{2}$ (the critically-damped limit, which produces smooth, non-oscillatory covariance decay), and
 # - a **misspecified exponential kernel** — a simpler single-timescale model that cannot capture the smooth rolloff of the true covariance.
 #
@@ -121,10 +130,10 @@ plt.tight_layout()
 #
 # Getting this calibration right is not cosmetic: if the off-transit Z-scores are inflated, every threshold crossing becomes a false alarm; if they are suppressed, real transits are missed. The plots and histogram below confirm that the SHO kernel with the true parameters produces a well-calibrated filter.
 
-# The Wald test statistic (also called the matched filter SNR) is:
+# The Wald test statistic (also called the matched filter signal-to-noise ratio) is:
 #
 # $$
-# \mathrm{SNR} = \frac{y^T C^{-1} s}{\sqrt{s^T C^{-1} s}}
+# Z = \frac{y^T C^{-1} s}{\sqrt{s^T C^{-1} s}}
 # $$
 #
 # In the white-noise case $C$ is diagonal:
@@ -138,7 +147,7 @@ plt.tight_layout()
 # \end{bmatrix}
 # $$
 #
-# and the SNR reduces to the familiar sum $\sum_i y_i s_i / \sigma_i^2$. For correlated noise, using the correct $C^{-1}$ from the GP is essential to avoid inflated or suppressed Z-scores.
+# and the Z-score reduces to the familiar sum $\sum_i y_i s_i / \sigma_i^2$. For correlated noise, using the correct $C^{-1}$ from the GP is essential to avoid inflated or suppressed Z-scores.
 #
 # In the code, the denominator $\sqrt{s^T C^{-1} s}$ is the **template norm** returned by `MatchedFilter.template_norm_and_projection`. It sets the scale against which the projection $y^T C^{-1} s$ is measured, so that a Z-score of 1 always means a one-sigma detection regardless of the template's amplitude or the noise level.
 
@@ -154,7 +163,7 @@ plt.tight_layout()
 #
 #
 # For a Gaussian Process, the log-likelihood (ignoring normalization constants) is:
-# $$\ln p(\mathbf{y} \mid \theta) = -\frac{1}{2} \mathbf{y}^T C^{-1} \mathbf{y} \approx -\frac{1}{2} \|f\|_{\mathcal{H}}^2$$
+# $$\ln p(\mathbf{y} \mid \theta) = \underbrace{-\frac{1}{2} \mathbf{y}^T C_\theta^{-1} \mathbf{y}}_{\text{Data Fit}} \underbrace{-\frac{1}{2} \ln |C_\theta|}_{\text{Complexity Penalty}} - \frac{n}{2} \ln(2\pi)$$
 #
 # Mathematically, the inverse covariance $C^{-1}$ acts as the metric tensor for this space.
 #
@@ -185,7 +194,7 @@ mf_statistics = matched_filter.z_score_map(monotransit_generator)
 
 
 fig, axes = plm.subplots(3, 1, sharex=True, rescale_height=0.5)
-mf_statistics.plot(axes=axes, threshold=5)
+mf_statistics.plot(axes=axes, threshold=5, time=time)
 
 axes[2].axhline(0, color="black", linestyle="--")
 
@@ -251,18 +260,8 @@ ax.set_ylabel("Density")
 #
 # Now that we have verified the filter is well-calibrated under the true kernel, we ask: what happens when the assumed noise model is wrong?
 #
-# We sweep the SHO kernel's period (`rho`) over three orders of magnitude while holding $Q = 1/\sqrt{2}$ fixed, and track three regimes — **overfit**, **optimal**, and **underfit** — at representative scales. The figure is organised as two columns:
+# To explore this, we construct a family of SHO kernels with varying periods (correlation lengths) but fixed quality factor $Q = 1/\sqrt{2}$. This will allow us to see how the Z-score and detection metrics evolve as the kernel transitions from underfitting (too long) to overfitting (too short).
 #
-# **Left column — time domain** (zoom around the transit):
-# - *Top*: raw flux overlaid with GP predictive means; at short periods the GP tracks the transit dip directly
-# - *Middle*: deviation of each kernel's predictive mean from the true GP mean, isolating what each kernel "adds or removes"
-# - *Bottom*: the effective transit template after whitening; ringing artifacts appear when the GP overfits
-#
-# **Right column — scale dependence**:
-# - *Top*: raw log-likelihood — the GP mathematically favours longer periods that explain the bulk variability, but this does not identify the detection-optimal scale
-# - *Middle*: detection significance (recovery fraction) — peaks at the Goldilocks scale where stellar variability is suppressed without erasing the transit
-# - *Bottom*: information retention (relative capacity) — drops sharply at short periods where the GP absorbs the signal
-
 # %%
 
 
@@ -272,8 +271,9 @@ scales = np.exp(np.linspace(np.log(1e-1), np.log(1e3), 21))
 test_gps = [
     GaussianProcess(
         kernel=terms.SHOTerm(
-            sigma=np.std(lc.flux),  #  5*np.exp(gp_params["log_sigma"]),
-            rho=scale,  # rho is 2*pi/omega, so it's directly your 'scale' in days
+            # sigma=np.std(lc.flux),  #  5*np.exp(gp_params["log_sigma"]),
+            sigma=np.exp(gp_params["log_sigma"]),  # true GP amplitude
+            rho=scale,  # rho = 2*pi/omega, so it's directly your 'scale' in days
             Q=1 / np.sqrt(2),
         ),
         # We could also use a RealTerm instead of SHOTerm
@@ -299,7 +299,20 @@ metrics = [
 recovery_fraction = np.array([m["recovery_fraction"] for m in metrics])
 relative_capacity = np.array([m["relative_capacity"] for m in metrics])
 
-
+# %% [markdown]
+# The figure below summarises the results.
+#
+# **Left column — time domain** (zoom around the transit):
+#
+# - *Top*: raw flux overlaid with GP predictive means
+# - *Middle*: deviation of each kernel's predictive mean from the true GP mean, isolating what each kernel "adds or removes"
+# - *Bottom*: the effective transit template after whitening
+#
+# **Right column — GP scale dependence**:
+#
+# - *Top*: raw log-likelihood, $\log p(\text{data} \mid \text{GP})$. Longer correlation lengths score higher because they absorb more broad stellar variability, but this is the wrong objective for detection — a GP that fits everything also fits the transit away.
+# - *Middle*: recovery fraction, $Z / \|s\|_{\text{white}}$. The matched-filter Z-score (transit template projected onto GP-whitened data), normalised by the white-noise reference norm. It measures how much white-noise detection power survives the GP. Too short a scale scrambles the transit dip; too long a scale lets stellar variability leak through — both depress the recovery fraction.
+# - *Bottom*: relative capacity, $\|s\|_{\text{GP}} / \|s\|_{\text{white}}$. A property of the noise model alone: the maximum Z-score this GP could deliver for the transit template, relative to the white-noise ideal. It drops sharply at short scales because the correlated inverse-covariance structure destructively interferes with the transit template.
 # %%
 # | code-fold: true
 # | code-summary: "Show plotting code"
@@ -313,7 +326,7 @@ ax_template = axes[2, 0]  # Bot Left: Whitened Templates
 
 # Column 1: The "Scale Domain" (Right side)
 ax_like = axes[0, 1]  # Top Right: Log-Likelihood
-ax_snr = axes[1, 1]  # Mid Right: Detection Significance
+ax_sig = axes[1, 1]  # Mid Right: Detection Significance
 ax_ret = axes[2, 1]  # Bot Right: Information Retention
 
 ax_flux.plot(time, flux, marker=".", ls="", mec="None", label="Flux", color="lightgray")
@@ -338,7 +351,7 @@ for plot_idx, gp_idx in enumerate(index_selection):
     whitened_signal = matched_test_filters[gp_idx].whiten(true_signal - 1)
     ax_template.plot(time, whitened_signal, label=label, color=colors[plot_idx])
 
-    ax_snr.plot(
+    ax_sig.plot(
         scales[gp_idx],
         recovery_fraction[gp_idx],
         marker="o",
@@ -376,8 +389,8 @@ ax_template.set_ylabel("Effective template")
 ax_like.plot(scales, log_likelihoods, color="black")
 ax_like.set_ylabel(r"$\Delta \ln \mathcal{L}$", color="black")
 
-ax_snr.plot(scales, recovery_fraction[:], marker=".", color="black")
-ax_snr.set_ylabel("Significance")
+ax_sig.plot(scales, recovery_fraction[:], marker=".", color="black")
+ax_sig.set_ylabel("Significance")
 
 ax_ret.plot(scales, relative_capacity, color="black", marker=".")
 ax_ret.set_ylabel("Information retention")
