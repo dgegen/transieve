@@ -200,7 +200,15 @@ stab = scan_gp_stability_map(
 best = stab.strongest_point()
 summary = stab.summary(5)
 print("Best grid point:", best)
-print("Summary:", summary)
+print("Summary (including log-space plateau area):", summary)
+
+features = stab.robust_features(z_threshold=5.0, max_fragility=0.1)
+print("\nRobust features (grid-invariant):")
+for k, v in features.items():
+    print(f"  {k}: {v:.4g}")
+
+z_marg = stab.marginalized_z()
+print(f"\nMarginalized Z-score: {z_marg:.3f}")
 
 
 # %%
@@ -208,8 +216,9 @@ print("Summary:", summary)
 # | code-summary: "Show plotting code"
 
 X, Y = np.meshgrid(stab.timescale_grid, stab.sigma_grid)
+plateau_contour = np.where(stab.get_plateau_mask(5), 1.0, 0.0)
 
-fig, axes = plm.subplots(1, 3, sharex=True, sharey=True)
+fig, axes = plm.subplots(1, 4, sharex=True, sharey=True)
 
 im0 = axes[0].pcolormesh(X, Y, stab.z_score, shading="auto", cmap="viridis")
 axes[0].set_title("Peak Z-score")
@@ -219,19 +228,18 @@ im1 = axes[1].pcolormesh(X, Y, stab.recovery_fraction, shading="auto", cmap="mag
 axes[1].set_title("Recovery fraction")
 fig.colorbar(im1, ax=axes[1])
 
-
 im2 = axes[2].pcolormesh(X, Y, stab.local_drop, shading="auto", cmap="cividis")
-axes[2].contour(
-    X,
-    Y,
-    np.where(stab.get_plateau_mask(5), 1.0, 0.0),
-    levels=[0.5],
-    colors="white",
-    linewidths=1.5,
-)
-
-axes[2].set_title("Local drop")
+axes[2].contour(X, Y, plateau_contour, levels=[0.5], colors="white", linewidths=1.5)
+axes[2].set_title("Local drop (plateau: white)")
 fig.colorbar(im2, ax=axes[2])
+
+# Log-marginal likelihood — shows where data support the GP hyperparameters.
+# Posterior weights for marginalized_z() are proportional to exp(log_L).
+log_L = stab.log_marginal_likelihood
+im3 = axes[3].pcolormesh(X, Y, log_L, shading="auto", cmap="plasma")
+axes[3].contour(X, Y, plateau_contour, levels=[0.5], colors="white", linewidths=1.5)
+axes[3].set_title("Log-marginal likelihood")
+fig.colorbar(im3, ax=axes[3])
 
 for ax in axes:
     ax.set_xscale("log")
@@ -242,18 +250,44 @@ axes[0].set_ylabel("sigma")
 plt.show()
 
 # %% [markdown]
-# The fact that the plateau is a diagonal "stripe" rather than a circle confirms the covariance degeneracy: As you increase the GP's noise amplitude, you must also increase the period to maintain the same level of "filtering" on the transit signal.
+# The plateau is a diagonal "stripe" rather than a circle, confirming the covariance
+# degeneracy: increasing the GP noise amplitude requires a longer period to maintain the
+# same degree of signal filtering.
 #
-# This 2D sensitivity analysis reveals the fundamental trade-off between noise suppression and signal preservation.
-# The Detection Significance map (left) displays a characteristic "ridge" where the Z-score is maximized; however, the Information Retention map (right) shows that at short correlation scales (ρ) and high amplitudes (σ), the filter becomes aggressive enough to "eat" the planet signal, driving retention toward zero.
+# ### Reading the four panels
 #
-# A detection is only considered physically robust if its peak significance occurs within the "Safe Harbor"—the region where Information Retention remains high (typically >80%). If the maximum Z-score only appears in the low-retention regime (bottom-left), the model is over-fitting the stellar noise at the expense of the transit. By anchoring the search to the intersection of these two metrics, we move beyond simple Likelihood maximization and instead optimize for the reliable recovery of the underlying planetary signal.
-
+# - **Peak Z-score** — where the matched-filter response is strongest.
+# - **Recovery fraction** — what fraction of the transit signal survives the GP filter.
+#   Values below ~0.8 mean the model is absorbing the transit into the noise term.
+# - **Local drop (plateau: white contour)** — brittleness of each grid cell relative to
+#   its four neighbours.  The white contour marks the stable plateau
+#   (`z_threshold=5`, `max_fragility=0.1`).
+# - **Log-marginal likelihood** — how well each `(sigma, period)` combination explains
+#   the data *without* the transit template.  This is the posterior weight used by
+#   `marginalized_z()`: high-Z regions that sit in a low-likelihood part of parameter
+#   space are naturally down-weighted, correcting for the look-elsewhere effect.
+#
+# ### Grid-invariant summary scalars
+#
+# | Metric | Description |
+# |--------|-------------|
+# | `log_space_plateau_area` | Area of the stable plateau in log(σ)×log(τ) space — invariant to grid bounds, unlike `plateau_fraction`. |
+# | `capacity_bounded_peak_z` | Max raw Z inside the physically valid envelope (recovery > 0.8, 0.8 < relative_capacity < 1.2).  Retains standard-normal properties. |
+# | `peak_brittleness` | `local_drop` at the global Z-score maximum — use as a veto: high values flag spurious stellar-activity ridges. |
+# | `is_safe_harbor` | 1 if the plateau is non-empty and the peak is not brittle. |
+# | `marginalized_z()` | Posterior-weighted average Z-score — corrects for look-elsewhere inflation of the peak. |
+#
 # ## Interpretation checklist
 #
-# - Prefer regions with high `Z-score` and high `Recovery Fraction`
-# - Inspect `Relative Capacity` as a diagnostic for signal preservation
-# - Use the plateau mask to avoid brittle detections that vanish under small GP-parameter shifts
+# - Prefer regions with high `Z-score` and high `Recovery Fraction`.
+# - Use `capacity_bounded_peak_z` instead of the raw grid maximum as the primary
+#   detection statistic; it avoids the degenerate signal-absorbing regime.
+# - Use `log_space_plateau_area` instead of `plateau_fraction` when comparing maps
+#   computed on different grids.
+# - Check `peak_brittleness` as a veto: a high value suggests the peak is a narrow ridge
+#   that vanishes under small hyperparameter shifts.
+# - Use `marginalized_z()` when you need a single scalar that accounts for the full
+#   posterior over GP hyperparameters rather than a point estimate.
 
 # %%
 

@@ -11,7 +11,10 @@ dev = [
 docs = [
   "ipython>=9.7.0",
   "quartodoc>=0.7.0",
-  "griffe<2.0"
+  "griffe<2.0",
+  "plotm",
+  "nbformat>=5.10.4",
+  "notebook>=7.5.6",
 ]
 test = [
   "pytest>=9.0.2"
@@ -19,6 +22,11 @@ test = [
 zarr = [
   "xarray>=2026.1.0",
   "zarr>=3.1.5"
+]
+all = [
+  {include-group = "docs"},
+  {include-group = "zarr"},
+  "pandas>=3.0.0",
 ]
 
 [project]
@@ -33,7 +41,7 @@ dependencies = [
   "matplotlib>=3.10.7",
   "numpy>=2.3.5",
   "pywavelets>=1.9.0",
-  "scipy>=1.16.3"
+  "scipy>=1.16.3",
 ]
 description = "Transit-signal analysis in correlated noise."
 name = "transieve"
@@ -47,3 +55,6 @@ Repository = "https://github.com/dgegen/transieve"
 
 [tool.ruff.lint.per-file-ignores]
 "docs/**/*.py" = ["E402"]
+
+[tool.uv.sources]
+plotm = { git = "https://github.com/dgegen/plotm" }

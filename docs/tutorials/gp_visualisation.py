@@ -10,7 +10,7 @@
 
 # %% [markdown]
 # ## GP noise modelling for transit detection
-# This notebook illustrates how...
+
 # %%
 
 

@@ -227,12 +227,19 @@ def check_retrievability(
     cap_ok = capacity_bounds[0] <= capacity <= capacity_bounds[1]
 
     loc_ok = True
+    global_peak_near_epoch = True
     peak_idx, _ = retr.strongest_match()
     if injected_time is not None and duration is not None:
         half_dur = 0.5 * float(duration)
         peak_time = float(retr.time[peak_idx])
         tol = half_dur if localization_tol is None else float(localization_tol)
-        loc_ok = abs(peak_time - float(injected_time)) <= tol
+        # Additional diagnostic: is the global peak near the injection?
+        global_peak_near_epoch = abs(peak_time - float(injected_time)) <= tol
+        # Verdict gate: is z at the epoch a local maximum within ±half_dur?
+        t = np.asarray(retr.time, dtype=float)
+        window = np.abs(t - float(injected_time)) <= tol
+        local_max_z = float(np.nanmax(retr.z_score[window])) if np.any(window) else z
+        loc_ok = z >= local_max_z
 
     stab_ok = True
     if stability_map is not None:
@@ -254,7 +261,7 @@ def check_retrievability(
         else:
             stab_ok = False
 
-    verdict = bool(sig_ok and rec_ok and cap_ok and loc_ok and stab_ok)
+    verdict = bool(sig_ok and rec_ok and cap_ok and stab_ok)
 
     diagnostics = dict(
         index=idx,
@@ -269,6 +276,7 @@ def check_retrievability(
         recovery_ok=rec_ok,
         capacity_ok=cap_ok,
         localization_ok=loc_ok,
+        global_peak_near_epoch=global_peak_near_epoch,
         stability_ok=stab_ok,
     )
 

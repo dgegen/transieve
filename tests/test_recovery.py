@@ -114,6 +114,146 @@ def test_scan_gp_stability_map_shapes_and_plateau_mask():
     assert "z_score" in best
 
 
+def test_robust_features_values():
+    lc = SimulatedLightCurve.from_transit(
+        epoch=0.0,
+        depth=0.002,
+        duration=0.2,
+        period=100.0,
+        baseline=4.0,
+        cadence=20.0,
+        multiply_signal=False,
+        seed=11,
+    )
+
+    gp_family = SHOGPFamily(jitter_range=(1e-6, 1e-2))
+    template = lc.deterministic_component - 1.0
+
+    initial_theta = np.array(
+        [
+            lc.gp_params["log_omega"],
+            lc.gp_params["log_sigma"],
+            lc.gp_params["log_quality"],
+            lc.gp_params["log_jitter"],
+        ]
+    )
+
+    stability = scan_gp_stability_map(
+        time=lc.time,
+        flux=lc.flux,
+        template=template,
+        gp_family=gp_family,
+        sigma_grid=np.geomspace(2e-4, 2e-3, 4),
+        timescale_grid=np.geomspace(0.5, 20.0, 5),
+        fit_mean=1.0,
+        fit_method="L-BFGS-B",
+        fit_max_retries=1,
+        fit_kwargs={"initial_theta": initial_theta},
+    )
+
+    features = stability.robust_features(z_threshold=3.0, max_fragility=0.1)
+
+    assert set(features) == {
+        "log_space_plateau_area",
+        "capacity_bounded_peak_z",
+        "max_z_plateau",
+        "peak_brittleness",
+        "is_safe_harbor",
+    }
+    assert features["log_space_plateau_area"] >= 0.0
+    assert features["capacity_bounded_peak_z"] >= 0.0
+    assert features["peak_brittleness"] >= 0.0
+    assert features["is_safe_harbor"] in (0.0, 1.0)
+
+    summary = stability.summary(z_threshold=3.0)
+    assert "log_space_plateau_area" in summary
+
+
+def test_marginalized_z():
+    lc = SimulatedLightCurve.from_transit(
+        epoch=0.0,
+        depth=0.002,
+        duration=0.2,
+        period=100.0,
+        baseline=4.0,
+        cadence=20.0,
+        multiply_signal=False,
+        seed=11,
+    )
+
+    gp_family = SHOGPFamily(jitter_range=(1e-6, 1e-2))
+    template = lc.deterministic_component - 1.0
+
+    initial_theta = np.array(
+        [
+            lc.gp_params["log_omega"],
+            lc.gp_params["log_sigma"],
+            lc.gp_params["log_quality"],
+            lc.gp_params["log_jitter"],
+        ]
+    )
+
+    stability = scan_gp_stability_map(
+        time=lc.time,
+        flux=lc.flux,
+        template=template,
+        gp_family=gp_family,
+        sigma_grid=np.geomspace(2e-4, 2e-3, 4),
+        timescale_grid=np.geomspace(0.5, 20.0, 5),
+        fit_mean=1.0,
+        fit_method="L-BFGS-B",
+        fit_max_retries=1,
+        fit_kwargs={"initial_theta": initial_theta},
+    )
+
+    assert stability.log_marginal_likelihood is not None
+    assert stability.log_marginal_likelihood.shape == stability.z_score.shape
+    assert np.all(np.isfinite(stability.log_marginal_likelihood))
+
+    z_marg = stability.marginalized_z()
+    assert np.isfinite(z_marg)
+    # Marginalized Z should not exceed the grid maximum (it's a weighted average)
+    assert z_marg <= float(np.nanmax(stability.z_score)) + 1e-9
+
+
+def test_marginalized_z_gate_excludes_broken_cells():
+    """Broken cells with inflated Z far outside the likelihood gate must not bias the integral."""
+    from transieve.gp.stability import GPStabilityMap
+
+    rng = np.random.default_rng(42)
+    sigma_grid = np.geomspace(1e-4, 1e-2, 10)
+    timescale_grid = np.geomspace(0.5, 20.0, 10)
+
+    # One valid cell (top-left) with a healthy signal; rest are numerically broken.
+    z = np.full((10, 10), 11.5)  # inflated, unphysical Z for broken cells
+    z[0, 0] = 3.5  # the one physically valid detection
+
+    log_L = np.full((10, 10), -1000.0)  # floor: broken GP solver output
+    log_L[0, 0] = 0.0  # best-fit cell
+
+    stab = GPStabilityMap(
+        sigma_grid=sigma_grid,
+        timescale_grid=timescale_grid,
+        timescale_name="period",
+        z_score=z,
+        z_white_noise=np.ones((10, 10)),
+        recovery_fraction=np.ones((10, 10)),
+        relative_capacity=np.ones((10, 10)),
+        local_drop=np.zeros((10, 10)),
+        reference_gp_params={},
+        log_marginal_likelihood=log_L,
+    )
+
+    # With the gate (default delta_log_L=16), only the valid cell contributes.
+    z_gated = stab.marginalized_z(delta_log_L=16.0)
+    assert abs(z_gated - 3.5) < 1e-9, f"Expected 3.5, got {z_gated}"
+
+    # Without the gate, broken cells at Δlog_L=1000 are still negligible (e^-1000 ≈ 0),
+    # but using a tiny gate of 0.5 should also isolate just the valid cell.
+    z_tight = stab.marginalized_z(delta_log_L=0.5)
+    assert abs(z_tight - 3.5) < 1e-9
+
+
 # ---------------------------------------------------------------------------
 # Pipeline behaviour with observational gaps
 # ---------------------------------------------------------------------------
