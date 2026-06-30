@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import celerite2.driver as driver
 import numpy as np
@@ -6,6 +7,7 @@ from celerite2 import GaussianProcess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from scipy.signal import fftconvolve
+from scipy.special import log_ndtr
 from scipy.stats import norm
 
 
@@ -144,6 +146,106 @@ class MatchedFilter:
         )
         return template_norm, precision_weighted_template
 
+    def get_search_profile(
+        self, bank: Callable[[float], np.ndarray] | TemplateBank
+    ) -> SearchProfile:
+        z_stats = self.z_score_map(bank)
+        bf_map = self.log_bayes_factor_map(bank, sigma_a=1.0, prior="half-normal")
+        return SearchProfile(
+            epochs=bank.epochs,
+            z_score=z_stats.z_score,
+            template_norm=z_stats.template_norm,
+            log_bayes_factor=bf_map,
+        )
+
+    def template_projection_and_norm(
+        self, template: np.ndarray, inject_template: bool = False
+    ) -> tuple[float, float]:
+        """Return (y^T C^-1 s, sqrt(s^T C^-1 s)) for `template`."""
+        template_norm, precision_weighted_template = self.template_norm_and_projection(
+            template
+        )
+        flux = self.flux + template if inject_template else self.flux
+        projection = float(np.dot(flux, precision_weighted_template))
+        return projection, template_norm
+
+    @staticmethod
+    def _logdiffexp(log_a: np.ndarray, log_b: np.ndarray) -> np.ndarray:
+        """Return log(exp(log_a) - exp(log_b)) in a stable way."""
+        log_a = np.asarray(log_a)
+        log_b = np.asarray(log_b)
+        swap = log_b > log_a
+        hi = np.where(swap, log_b, log_a)
+        lo = np.where(swap, log_a, log_b)
+        return hi + np.log1p(-np.exp(lo - hi))
+
+    @staticmethod
+    def _log_bayes_factor_from_projection(
+        projection: np.ndarray,
+        template_norm: np.ndarray,
+        sigma_a: float,
+        prior: str = "gaussian",
+        amplitude_bounds: tuple[float, float] | None = None,
+    ) -> np.ndarray:
+        """Compute log Bayes factor using sufficient statistics.
+
+        Parameters
+        ----------
+        projection:
+            The matched-filter projection, ``y^T C^{-1} s``.
+        template_norm:
+            The matched-filter norm, ``sqrt(s^T C^{-1} s)``.
+        sigma_a:
+            Standard deviation of the Gaussian amplitude prior (ignored for
+            ``prior='uniform'``).
+        prior:
+            One of ``'gaussian'``, ``'half-normal'``, or ``'uniform'``.
+        amplitude_bounds:
+            (low, high) bounds for the uniform prior. Required when
+            ``prior='uniform'``.
+        """
+        s2 = np.asarray(template_norm) ** 2
+        projection = np.asarray(projection)
+        if np.any(s2 <= 0):
+            raise ValueError("Template norm must be positive to compute Bayes factor.")
+
+        prior_key = str(prior).lower().replace("_", "-")
+        if prior_key in {"gaussian", "normal"}:
+            if sigma_a <= 0:
+                raise ValueError("sigma_a must be positive for a Gaussian prior.")
+            sigma_a2 = float(sigma_a) ** 2
+            denom = 1.0 + sigma_a2 * s2
+            return 0.5 * (sigma_a2 * projection**2 / denom) - 0.5 * np.log(denom)
+
+        if prior_key in {"half-normal", "halfnormal", "halfnormal"}:
+            if sigma_a <= 0:
+                raise ValueError("sigma_a must be positive for a half-normal prior.")
+            sigma_a2 = float(sigma_a) ** 2
+            denom = 1.0 + sigma_a2 * s2
+            log_bf = 0.5 * (sigma_a2 * projection**2 / denom) - 0.5 * np.log(denom)
+            kappa = projection * sigma_a / np.sqrt(denom)
+            log_factor = np.log(2.0) + norm.logcdf(kappa)
+            return log_bf + log_factor
+
+        if prior_key == "uniform":
+            if amplitude_bounds is None:
+                raise ValueError("amplitude_bounds are required for uniform prior.")
+            low, high = amplitude_bounds
+            if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+                raise ValueError("amplitude_bounds must be finite with low < high.")
+            mu = projection / s2
+            sigma = 1.0 / np.sqrt(s2)
+            z_low = (low - mu) / sigma
+            z_high = (high - mu) / sigma
+            log_cdf_low = log_ndtr(z_low)
+            log_cdf_high = log_ndtr(z_high)
+            log_diff = MatchedFilter._logdiffexp(log_cdf_high, log_cdf_low)
+            log_prefactor = 0.5 * np.log(2.0 * np.pi) - 0.5 * np.log(s2)
+            log_exp = 0.5 * (projection**2 / s2)
+            return log_exp + log_prefactor + log_diff - np.log(high - low)
+
+        raise ValueError(f"Unknown amplitude prior: {prior!r}.")
+
     def z_score(self, template, inject_template=False) -> tuple[float, float]:
         """Compute scalar matched-filter Z-score for a single template.
 
@@ -164,10 +266,36 @@ class MatchedFilter:
 
         return z_score, template_norm
 
+    def _bank_stats(
+        self, bank: TemplateBank | np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return (projections, template_norms) for all templates in `bank`.
+
+        Builds the full [N, M] template matrix and solves C^{-1} S in a single
+        celerite2 call, avoiding a Python loop over templates.
+
+        `bank` may be a :class:`TemplateBank` or a pre-built ``[N, M]`` array
+        (pass the array to avoid re-materializing templates on repeated calls).
+        """
+        template_matrix = (
+            bank if isinstance(bank, np.ndarray) else np.column_stack(list(bank))
+        )
+        if template_matrix.shape[0] != len(self.flux):
+            raise ValueError("Template length must match time/flux length.")
+        precision_weighted = self.gp.apply_inverse(template_matrix)  # [N, M]
+        template_norms = np.sqrt(
+            np.maximum(
+                np.einsum("ij,ij->j", template_matrix, precision_weighted), self._EPS
+            )
+        )
+        projections = self.flux @ precision_weighted
+        return projections, template_norms
+
     def z_score_map(
         self,
         template_bank: Callable[[float], np.ndarray] | TemplateBank,
-    ) -> MatchedFilterStatistics:
+        epochs: np.ndarray | None = None,
+    ) -> SearchProfile:
         """Compute Z-scores for a template bank over a grid of epochs.
 
         Parameters
@@ -178,13 +306,75 @@ class MatchedFilter:
 
         Returns
         -------
-        MatchedFilterStatistics
+        SearchProfile
             Z-scores and template norms, one entry per epoch.
         """
         bank = TemplateBank._coerce(template_bank, default_epochs=self.gp._t)
-        z_scores, template_norms = zip(*[self.z_score(t) for t in bank])
-        return MatchedFilterStatistics(
-            z_score=np.array(z_scores), template_norm=np.array(template_norms)
+        projections, template_norms = self._bank_stats(bank)
+        if epochs is None:
+            if hasattr(bank, "epochs"):
+                epochs = bank.epochs
+            elif isinstance(template_bank, TemplateBank):
+                epochs = template_bank.epochs
+            elif len(self.gp._t) == len(projections):
+                epochs = self.gp._t
+            else:
+                raise ValueError(
+                    "Unable to infer epochs for z_score_map. Please provide an explicit "
+                    "epochs array or pass a TemplateBank with an epochs attribute."
+                )
+        return SearchProfile(
+            epochs=epochs,
+            z_score=projections / template_norms,
+            template_norm=template_norms,
+        )
+
+    def log_bayes_factor(
+        self,
+        template: np.ndarray,
+        sigma_a: float,
+        prior: str = "gaussian",
+        amplitude_bounds: tuple[float, float] | None = None,
+        inject_template: bool = False,
+    ) -> float:
+        """Compute log Bayes factor for a single template.
+
+        The amplitude prior is Gaussian by default (two-sided, mean 0). Use
+        ``prior='half-normal'`` for positive-only depths or ``prior='uniform'``
+        with ``amplitude_bounds`` to define a bounded prior.
+        """
+        projection, template_norm = self.template_projection_and_norm(
+            template, inject_template=inject_template
+        )
+        log_bf = MatchedFilter._log_bayes_factor_from_projection(
+            projection,
+            template_norm,
+            sigma_a,
+            prior=prior,
+            amplitude_bounds=amplitude_bounds,
+        )
+        return float(log_bf)
+
+    def log_bayes_factor_map(
+        self,
+        template_bank: Callable[[float], np.ndarray] | TemplateBank | np.ndarray,
+        sigma_a: float,
+        prior: str = "gaussian",
+        amplitude_bounds: tuple[float, float] | None = None,
+    ) -> np.ndarray:
+        """Compute log Bayes factors for a template bank over epochs."""
+        if isinstance(template_bank, np.ndarray):
+            projections, template_norms = self._bank_stats(template_bank)
+        else:
+            bank = TemplateBank._coerce(template_bank, default_epochs=self.gp._t)
+            projections, template_norms = self._bank_stats(bank=bank)
+
+        return MatchedFilter._log_bayes_factor_from_projection(
+            projections,
+            template_norms,
+            sigma_a,
+            prior=prior,
+            amplitude_bounds=amplitude_bounds,
         )
 
     def z_score_map_fft(self, template):
@@ -205,8 +395,10 @@ class MatchedFilter:
         )
         z_score = projected_template / template_norm
 
-        return MatchedFilterStatistics(
-            z_score=z_score, template_norm=template_norm * np.ones_like(z_score)
+        return SearchProfile(
+            epochs=self.gp._t,
+            z_score=z_score,
+            template_norm=template_norm * np.ones_like(z_score),
         )
 
     def template_metrics(self, template: np.ndarray) -> dict:
@@ -229,6 +421,121 @@ class MatchedFilter:
             "white_template_norm": white_template_norm,
             "recovery_fraction": recovery_fraction,
             "relative_capacity": relative_capacity,
+        }
+
+    def matrix_metrics(self, template_matrix: np.ndarray) -> dict:
+        """Vectorized template_metrics for a pre-materialized template array.
+
+        Parameters
+        ----------
+        template_matrix : ndarray, shape (N, M) or (N, M_dur, t_transit)
+            Columns/slices are individual templates, all of length N.
+            For multi-dimensional template spaces (e.g. duration × epoch),
+            pass a 3-D array; output arrays preserve the trailing shape.
+
+        Returns
+        -------
+        dict with same keys as template_metrics() but each value has shape
+        ``template_matrix.shape[1:]``:
+            z_score, template_norm, z_white_noise, white_template_norm,
+            recovery_fraction, relative_capacity
+        """
+        if template_matrix.shape[0] != len(self.flux):
+            raise ValueError(
+                f"template_matrix.shape[0] ({template_matrix.shape[0]}) must equal "
+                f"len(self.flux) ({len(self.flux)})."
+            )
+        output_shape = template_matrix.shape[1:]
+        flat = template_matrix.reshape(len(self.flux), -1)
+        projections, template_norms = self._bank_stats(flat)
+        variance = np.maximum(self.gp._diag, self._EPS)
+        white_template_norms = np.sqrt(
+            np.maximum(
+                np.einsum("ij,ij->j", flat, flat / variance[:, None]),
+                self._EPS,
+            )
+        )
+        z_score = projections / template_norms
+        z_white_noise = (self.flux / variance) @ flat / white_template_norms
+        recovery_fraction = np.maximum(z_score, 0.0) / white_template_norms
+        relative_capacity = template_norms / white_template_norms
+        return {
+            "z_score": z_score.reshape(output_shape),
+            "template_norm": template_norms.reshape(output_shape),
+            "z_white_noise": z_white_noise.reshape(output_shape),
+            "white_template_norm": white_template_norms.reshape(output_shape),
+            "recovery_fraction": recovery_fraction.reshape(output_shape),
+            "relative_capacity": relative_capacity.reshape(output_shape),
+        }
+
+    def log_bayes_factor_matrix(
+        self,
+        template_matrix: np.ndarray,
+        sigma_a: float,
+        prior: str = "gaussian",
+        amplitude_bounds: tuple[float, float] | None = None,
+    ) -> np.ndarray:
+        """Batch log Bayes factors for a pre-materialized template array.
+
+        Parameters
+        ----------
+        template_matrix : ndarray, shape (N, M) or (N, M_dur, t_transit)
+            For multi-dimensional template spaces pass a 3-D array; output
+            preserves the trailing shape.
+        sigma_a : float
+            Standard deviation of the amplitude prior.
+        prior : str
+            "gaussian", "half-normal", or "uniform".
+        amplitude_bounds : tuple[float, float] | None
+            Required when prior="uniform".
+
+        Returns
+        -------
+        ndarray, shape ``template_matrix.shape[1:]``
+            Log Bayes factor for each template.
+        """
+        output_shape = template_matrix.shape[1:]
+        flat = template_matrix.reshape(len(self.flux), -1)
+        projections, template_norms = self._bank_stats(flat)
+        log_bf = MatchedFilter._log_bayes_factor_from_projection(
+            projections,
+            template_norms,
+            sigma_a,
+            prior=prior,
+            amplitude_bounds=amplitude_bounds,
+        )
+        return log_bf.reshape(output_shape)
+
+    def compute_sensitivity_limits(
+        self, template_or_matrix: np.ndarray, z_threshold: float
+    ) -> dict:
+        """Minimum detectable transit depth under ideal and realization-adjusted conditions.
+
+        Parameters
+        ----------
+        template_or_matrix : ndarray, shape (N,) or (N, M)
+            Single template (1D) or pre-materialized matrix (2D).
+        z_threshold : float
+            Target detection significance.
+
+        Returns
+        -------
+        dict with keys:
+            ideal : scalar or (M,) array
+                z_threshold / sigma_s — the depth needed assuming zero background noise.
+            realization_adjusted : scalar or (M,) array
+                (z_threshold - Z_bg) / sigma_s — additional depth needed given the
+                current noise fluctuation at each epoch.
+        """
+        if template_or_matrix.ndim == 1:
+            z_bg, template_norm = self.z_score(template_or_matrix)
+        else:
+            projections, template_norms = self._bank_stats(template_or_matrix)
+            z_bg = projections / template_norms
+            template_norm = template_norms
+        return {
+            "ideal": z_threshold / template_norm,
+            "realization_adjusted": (z_threshold - z_bg) / template_norm,
         }
 
     def white_noise_template_norm(self, template: np.ndarray) -> float:
@@ -280,123 +587,144 @@ class MatchedFilter:
         return z_score, template_norm
 
 
-@dataclass
-class MatchedFilterStatistics:
-    """Results from a MatchedFilter."""
+@dataclass(frozen=True)
+class SearchProfile:
+    """A unified diagnostic container for 1D matched-filter search profiles.
 
-    THRESHOLD = 7.0
+    Can hold pure frequentist metrics, pure Bayesian metrics, or a joint evaluation.
+    Properties are lazy-evaluated to prevent unnecessary memory or compute overhead.
+    """
 
-    z_score: np.ndarray
-    template_norm: np.ndarray
+    epochs: np.ndarray
+
+    # Optional parameters depending on which scan paradigm was executed
+    z_score: np.ndarray | None = None
+    template_norm: np.ndarray | None = None
+    log_bayes_factor: np.ndarray | None = None
+    log_bayes_factor_global: float | None = None
+    log_evidence_marg: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        # Strict validation only on the arrays that are actively provided
+        n_epochs = len(self.epochs)
+        if self.z_score is not None and len(self.z_score) != n_epochs:
+            raise ValueError("Dimensions of epochs and Z-scores must match.")
+        if self.template_norm is not None and len(self.template_norm) != n_epochs:
+            raise ValueError("Dimensions of epochs and template norms must match.")
+        if self.log_bayes_factor is not None and len(self.log_bayes_factor) != n_epochs:
+            raise ValueError("Dimensions of epochs and Log Bayes Factors must match.")
+        if (
+            self.log_evidence_marg is not None
+            and len(self.log_evidence_marg) != n_epochs
+        ):
+            raise ValueError("Dimensions of epochs and log evidence (marg) must match.")
 
     @property
-    def best_fit_scale(self):
-        """The Maximum Likelihood Estimate (MLE) of the template norm."""
+    def best_fit_scale(self) -> np.ndarray:
+        """The Maximum Likelihood Estimate (MLE) of the template norm profile."""
+        if self.z_score is None or self.template_norm is None:
+            raise AttributeError(
+                "best_fit_scale requires both z_score and template_norm."
+            )
         return self.z_score / self.template_norm
 
     @property
-    def log_likelihood_ratio(self):
-        """
-        The log-likelihood ratio (Delta ln L) of the match.
-        For Gaussian noise, this is 1/2 * Z^2.
-        """
-        # We usually care about the LLR of the positive match
+    def log_likelihood_ratio(self) -> np.ndarray:
+        """The log-likelihood ratio (Delta ln L) timeline profile."""
+        if self.z_score is None:
+            raise AttributeError("log_likelihood_ratio requires z_score.")
         return 0.5 * np.maximum(self.z_score, 0) ** 2
 
-    def get_detectability(self, threshold=None, robust=True):
-        """
-        Calculates depth-related thresholds based on a target Z-score.
+    def strongest_frequentist_match(self) -> dict[str, Any]:
+        if self.z_score is None:
+            raise AttributeError(
+                "No frequentist Z-score data available in this profile."
+            )
+        idx = int(np.nanargmax(self.z_score))
+        return {
+            "index": idx,
+            "epoch": float(self.epochs[idx]),
+            "value": float(self.z_score[idx]),
+            "metric": "Z-score",
+        }
 
-        Returns
-        -------
-        depth_to_threshold : np.ndarray
-            The additional depth needed to reach the threshold given
-            current noise fluctuations.
-        sensitivity : np.ndarray
-            The depth required to achieve the threshold z-score
-            under nominal noise (50% recovery probability).
-        """
-        if robust:
-            mad = np.nanmedian(np.abs(self.z_score - np.nanmedian(self.z_score)))
-            noise_floor = mad * 1.4826
-        else:
-            noise_floor = 1.0
+    def strongest_bayesian_match(self) -> dict[str, Any]:
+        if self.log_bayes_factor is None:
+            raise AttributeError(
+                "No Bayesian log Bayes factor data available in this profile."
+            )
+        idx = int(np.nanargmax(self.log_bayes_factor))
+        return {
+            "index": idx,
+            "epoch": float(self.epochs[idx]),
+            "value": float(self.log_bayes_factor[idx]),
+            "metric": "ln B10",
+        }
 
-        if threshold is None:
-            threshold = MatchedFilterStatistics.THRESHOLD
-
-        if noise_floor <= 0:
-            raise ValueError("Noise floor must be positive for robust thresholding.")
-
-        threshold *= noise_floor
-
-        depth_to_threshold = (threshold - self.z_score) / self.template_norm
-
-        sensitivity = threshold / self.template_norm
-
-        return depth_to_threshold, sensitivity, float(threshold)
-
-    def theoretical_fap(self):
-        """Probability of finding at least one noise peak >= max Z-score by chance."""
-        max_z_score = np.nanmax(self.z_score)
-        n_trials = len(self.z_score)
-        p_single = 1 - norm.cdf(max_z_score)
-        return 1 - (1 - p_single) ** n_trials
-
-    def empirical_significance(self, peak_index=None, window_size=None):
-        """Percentile rank of the peak relative to the rest of the Z-score map."""
-        if peak_index is None:
-            peak_index = np.nanargmax(self.z_score)
-        peak_value = self.z_score[peak_index]
-
-        if window_size:
-            mask = np.ones(len(self.z_score), dtype=bool)
-            start = max(0, peak_index - window_size)
-            end = min(len(self.z_score), peak_index + window_size)
-            mask[start:end] = False
-            null_dist = self.z_score[mask]
-        else:
-            null_dist = self.z_score
-
-        p_value = np.sum(null_dist >= peak_value) / len(null_dist)
-        z_score = (peak_value - np.mean(null_dist)) / np.std(null_dist)
-        return {"p_value": p_value, "empirical_z": z_score}
-
-    def strongest_match(self):
-        """Return the index and value of the strongest match."""
-        idx = np.nanargmax(self.z_score)
-        return idx, self.z_score[idx]
-
-    def __repr__(self):
-        return (
-            f"MatchedFilterStatistics(max_z_score={np.nanmax(self.z_score):.2f}, "
-            f"mean_template_norm={np.nanmean(self.template_norm):.2f})"
-        )
-
-    def __str__(self):
-        return self.__repr__()
-
-    def plot(self, time=None, axes=None, threshold=None, **kwargs):
+    def plot(
+        self,
+        threshold_z: float | None = 3.0,
+        threshold_ln_bf: float | None = 5.0,
+        axes=None,
+    ) -> Any:
+        """Generates a perfectly synchronized layout matching your diagnostic needs."""
         import matplotlib.pyplot as plt
 
-        depth_to_threshold, sensitivity, _ = self.get_detectability(threshold=threshold)
+        has_bf = self.log_bayes_factor is not None
+        has_z = self.z_score is not None
 
+        if not (has_bf or has_z):
+            raise ValueError("Profile contains no data arrays to plot.")
+
+        n_rows = int(has_bf) + int(has_z)
         if axes is None:
-            _, axes = plt.subplots(3, 1, sharex=True)
+            fig, axes = plt.subplots(n_rows, 1, figsize=(10, 3.5 * n_rows), sharex=True)
+        ax_list = [axes] if n_rows == 1 else list(axes)
 
-        if time is None:
-            time = np.arange(len(self.z_score))
+        curr_ax = 0
+        # Panel 1: Bayesian Evidence Map
+        if has_bf:
+            ax = ax_list[curr_ax]
+            ax.plot(
+                self.epochs,
+                self.log_bayes_factor,
+                color="black",
+                lw=1.5,
+                label=r"$\ln B_{10}$",
+            )
+            if threshold_ln_bf is not None:
+                ax.axhline(
+                    threshold_ln_bf,
+                    color="teal",
+                    ls="-.",
+                    label=f"Strong Evidence ({threshold_ln_bf})",
+                )
+            ax.set_ylabel(r"$\ln B_{10}$")
+            ax.legend(loc="upper right")
+            ax.grid(True, alpha=0.3)
+            curr_ax += 1
 
-        axes[0].plot(time, self.z_score, **kwargs)
-        axes[1].plot(time, self.template_norm, **kwargs)
-        axes[2].plot(time, depth_to_threshold, label="Depth to threshold", **kwargs)
-        axes[2].plot(time, sensitivity, label="Sensitivity", **kwargs)
+        # Panel 2: Frequentist Map
+        if has_z:
+            ax = ax_list[curr_ax]
+            ax.plot(
+                self.epochs,
+                self.z_score,
+                color="crimson",
+                lw=1.5,
+                label="MLE $Z$-score",
+            )
+            if threshold_z is not None:
+                ax.axhline(
+                    threshold_z,
+                    color="orange",
+                    ls="--",
+                    label=rf"{threshold_z}$\sigma$ Threshold",
+                )
+            ax.set_ylabel("Matched Filter Z-score")
+            ax.legend(loc="upper right")
+            ax.grid(True, alpha=0.3)
 
-        if np.any(sensitivity < 0):
-            axes[2].axhline(0, color="black", linestyle="--")
-
-        axes[0].set_ylabel("Z-score")
-        axes[1].set_ylabel("Template norm")
-        axes[2].set_ylabel("Sensitivity")
-        axes[-1].set_xlabel("Time [days]")
-        axes[2].legend()
+        ax_list[-1].set_xlabel(r"Transit search epoch time ($t_0$)")
+        plt.tight_layout()
+        return fig, ax_list

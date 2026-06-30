@@ -6,9 +6,8 @@ import numpy as np
 import pytest
 
 from transieve.gp.fit import SHOGPFamily
-from transieve.gp.match import MatchedFilter, MatchedFilterStatistics, TemplateBank
+from transieve.gp.match import MatchedFilter, SearchProfile, TemplateBank
 from transieve.lightcurve import LightCurve
-
 
 _THETA = np.array([np.log(2 * np.pi / 2.0), np.log(5e-4), np.log(2.0), np.log(5e-5)])
 
@@ -19,13 +18,6 @@ def _build_matched_filter(lc: LightCurve, family=None) -> MatchedFilter:
     gp = family.build_gp_from_theta(_THETA, lc)
     centered = lc.flux - np.median(lc.flux)
     return MatchedFilter(gp=gp, flux=centered, check_zero_centered=False)
-
-
-def _make_stats(n=50, seed=0):
-    rng = np.random.default_rng(seed)
-    z = rng.standard_normal(n)
-    norm = np.abs(rng.standard_normal(n)) + 0.1
-    return MatchedFilterStatistics(z_score=z, template_norm=norm)
 
 
 class TestTemplateBank:
@@ -102,6 +94,18 @@ class TestMatchedFilterOperations:
         assert proj.shape == template.shape
         assert norm > 0
 
+    def test_log_bayes_factor_gaussian_matches_projection(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        template = np.zeros(len(simple_lc.time))
+        template[90:110] = -1e-3
+        projection, template_norm = mf.template_projection_and_norm(template)
+        sigma_a = 2e-3
+        expected = MatchedFilter._log_bayes_factor_from_projection(
+            projection, template_norm, sigma_a
+        )
+        log_bf = mf.log_bayes_factor(template, sigma_a)
+        assert log_bf == pytest.approx(float(expected), rel=1e-9, abs=1e-12)
+
     def test_z_score_returns_two_floats(self, simple_lc):
         mf = _build_matched_filter(simple_lc)
         template = np.zeros(len(simple_lc.time))
@@ -157,8 +161,8 @@ class TestMatchedFilterOperations:
         template_zero[90:100] = -1e-3
         epochs = simple_lc.time[::20]
         bank = TemplateBank(make=lambda t: template_zero, epochs=epochs)
-        stats = mf.z_score_map(bank)
-        assert isinstance(stats, MatchedFilterStatistics)
+        stats = mf.z_score_map(bank, epochs=epochs)
+        assert isinstance(stats, SearchProfile)
         assert stats.z_score.shape == (len(epochs),)
         assert stats.template_norm.shape == (len(epochs),)
 
@@ -174,61 +178,113 @@ class TestMatchedFilterOperations:
         template = np.zeros(n)
         template[90:110] = -1e-3
         stats = mf.z_score_map_fft(template)
-        assert isinstance(stats, MatchedFilterStatistics)
+        assert isinstance(stats, SearchProfile)
         assert stats.z_score.shape == (n,)
         assert stats.template_norm.shape == (n,)
 
 
-class TestMatchedFilterStatistics:
-    def test_best_fit_scale(self):
-        stats = MatchedFilterStatistics(
-            z_score=np.array([2.0, 4.0]), template_norm=np.array([1.0, 2.0])
-        )
-        np.testing.assert_allclose(stats.best_fit_scale, np.array([2.0, 2.0]))
+class TestMatchedFilterBatchMethods:
+    """Tests for matrix_metrics, log_bayes_factor_matrix, compute_sensitivity_limits."""
 
-    def test_log_likelihood_ratio_non_negative(self):
-        assert np.all(_make_stats().log_likelihood_ratio >= 0)
+    def _mf_and_matrix(self, simple_lc, m=3):
+        mf = _build_matched_filter(simple_lc)
+        n = len(simple_lc.time)
+        template = np.zeros(n)
+        template[90:110] = -1e-3
+        mat = np.column_stack([np.roll(template, k * 5) for k in range(m)])
+        return mf, mat, template
 
-    def test_log_likelihood_ratio_zero_for_negative_z(self):
-        stats = MatchedFilterStatistics(
-            z_score=np.array([-3.0, -1.0]), template_norm=np.ones(2)
-        )
-        np.testing.assert_array_equal(stats.log_likelihood_ratio, np.zeros(2))
+    def test_matrix_metrics_shapes(self, simple_lc):
+        mf, mat, _ = self._mf_and_matrix(simple_lc, m=3)
+        result = mf.matrix_metrics(mat)
+        for key in (
+            "z_score",
+            "template_norm",
+            "z_white_noise",
+            "white_template_norm",
+            "recovery_fraction",
+            "relative_capacity",
+        ):
+            assert result[key].shape == (3,), f"{key} shape mismatch"
+            assert np.all(np.isfinite(result[key])), f"{key} contains non-finite values"
 
-    def test_get_detectability_shapes(self):
-        dtt, sens, thresh = _make_stats(n=30).get_detectability(threshold=7.0)
-        assert dtt.shape == (30,)
-        assert sens.shape == (30,)
-        assert np.isfinite(thresh)
+    def test_matrix_metrics_agrees_with_template_metrics(self, simple_lc):
+        mf, _, template = self._mf_and_matrix(simple_lc)
+        scalar = mf.template_metrics(template)
+        batch = mf.matrix_metrics(template[:, None])
+        for key in scalar:
+            assert batch[key][0] == pytest.approx(scalar[key], rel=1e-9, abs=1e-14), key
 
-    def test_get_detectability_robust_false(self):
-        _, _, thresh = _make_stats(n=20).get_detectability(threshold=5.0, robust=False)
-        assert thresh == pytest.approx(5.0)
+    def test_matrix_metrics_bad_shape_raises(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        with pytest.raises(ValueError, match="shape"):
+            mf.matrix_metrics(np.zeros((5, 3)))
 
-    def test_get_detectability_zero_noise_floor_raises(self):
-        stats = MatchedFilterStatistics(z_score=np.ones(10), template_norm=np.ones(10))
-        with pytest.raises(ValueError, match="Noise floor"):
-            stats.get_detectability(threshold=7.0, robust=True)
+    def test_log_bayes_factor_matrix_shape(self, simple_lc):
+        mf, mat, _ = self._mf_and_matrix(simple_lc, m=4)
+        result = mf.log_bayes_factor_matrix(mat, sigma_a=2e-3)
+        assert result.shape == (4,)
+        assert np.all(np.isfinite(result))
 
-    def test_theoretical_fap_in_range(self):
-        fap = _make_stats(n=50, seed=7).theoretical_fap()
-        assert 0.0 <= fap <= 1.0
+    def test_log_bayes_factor_matrix_agrees_with_scalar(self, simple_lc):
+        mf, _, template = self._mf_and_matrix(simple_lc)
+        scalar = mf.log_bayes_factor(template, sigma_a=2e-3)
+        batch = mf.log_bayes_factor_matrix(template[:, None], sigma_a=2e-3)
+        assert batch[0] == pytest.approx(scalar, rel=1e-9, abs=1e-14)
 
-    def test_empirical_significance_keys(self):
-        result = _make_stats(n=50).empirical_significance()
-        assert "p_value" in result and "empirical_z" in result
+    def test_compute_sensitivity_limits_scalar(self, simple_lc):
+        mf, _, template = self._mf_and_matrix(simple_lc)
+        result = mf.compute_sensitivity_limits(template, z_threshold=7.0)
+        assert np.isfinite(result["ideal"]) and result["ideal"] > 0
+        assert np.isfinite(result["realization_adjusted"])
 
-    def test_empirical_significance_with_window(self):
-        result = _make_stats(n=50).empirical_significance(window_size=5)
-        assert "p_value" in result
+    def test_compute_sensitivity_limits_matrix_shapes(self, simple_lc):
+        mf, mat, _ = self._mf_and_matrix(simple_lc, m=5)
+        result = mf.compute_sensitivity_limits(mat, z_threshold=7.0)
+        assert result["ideal"].shape == (5,)
+        assert result["realization_adjusted"].shape == (5,)
+        assert np.all(np.isfinite(result["ideal"]))
+        assert np.all(np.isfinite(result["realization_adjusted"]))
 
-    def test_strongest_match_valid_index(self):
-        stats = _make_stats(n=30)
-        idx, val = stats.strongest_match()
-        assert 0 <= idx < 30
-        assert val == stats.z_score[idx]
-        assert val == np.nanmax(stats.z_score)
 
-    def test_repr(self):
-        r = repr(_make_stats(n=10))
-        assert "MatchedFilterStatistics" in r and "max_z_score" in r
+class TestMatrixMetricsND:
+    """matrix_metrics and log_bayes_factor_matrix with N-D template arrays."""
+
+    def test_3d_output_shape(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        N, M, T = len(simple_lc.time), 3, 5
+        tm = np.random.default_rng(0).standard_normal((N, M, T)) * 1e-4
+        result = mf.matrix_metrics(tm)
+        for key in result:
+            assert result[key].shape == (M, T), f"{key}: got {result[key].shape}"
+
+    def test_2d_output_shape_unchanged(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        N, K = len(simple_lc.time), 7
+        tm = np.random.default_rng(1).standard_normal((N, K)) * 1e-4
+        result = mf.matrix_metrics(tm)
+        assert result["z_score"].shape == (K,)
+
+    def test_3d_values_match_flat_2d(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        N, M, T = len(simple_lc.time), 2, 4
+        tm3d = np.random.default_rng(2).standard_normal((N, M, T)) * 1e-4
+        r3d = mf.matrix_metrics(tm3d)
+        r2d = mf.matrix_metrics(tm3d.reshape(N, M * T))
+        np.testing.assert_allclose(r3d["z_score"].ravel(), r2d["z_score"])
+        np.testing.assert_allclose(r3d["template_norm"].ravel(), r2d["template_norm"])
+
+    def test_log_bayes_factor_matrix_3d_shape(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        N, M, T = len(simple_lc.time), 2, 6
+        tm = np.random.default_rng(3).standard_normal((N, M, T)) * 1e-4
+        lbf = mf.log_bayes_factor_matrix(tm, sigma_a=1e-3)
+        assert lbf.shape == (M, T)
+
+    def test_log_bayes_factor_matrix_3d_values_match_flat_2d(self, simple_lc):
+        mf = _build_matched_filter(simple_lc)
+        N, M, T = len(simple_lc.time), 2, 4
+        tm3d = np.random.default_rng(4).standard_normal((N, M, T)) * 1e-4
+        lbf3d = mf.log_bayes_factor_matrix(tm3d, sigma_a=1e-3)
+        lbf2d = mf.log_bayes_factor_matrix(tm3d.reshape(N, M * T), sigma_a=1e-3)
+        np.testing.assert_allclose(lbf3d.ravel(), lbf2d)

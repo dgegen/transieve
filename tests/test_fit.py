@@ -191,3 +191,24 @@ class TestMakeNegLogLike:
         # Extreme theta that will likely cause a numerical issue
         val = nll(np.array([1e10, 1e10, 1e10, 1e10]))
         assert not np.isneginf(val)  # Must be finite or +inf, not -inf
+
+    def test_map_regularization_penalty(self, simple_lc):
+        fam = SHOGPFamily(jitter_range=(1e-6, 1e-2))
+        theta = np.array([np.log(2 * np.pi / 2.0), -6.0, np.log(2.0), np.log(5e-5)])
+
+        # Raw likelihood (use_regularization=False)
+        nll_raw_func = make_neg_log_like(fam, simple_lc, use_regularization=False)
+        val_raw = nll_raw_func(theta)
+
+        # Regularized likelihood with default prior: mu=-5.0, omega=2.0
+        nll_reg_func = make_neg_log_like(
+            fam,
+            simple_lc,
+            use_regularization=True,
+            sigma_prior_mu=-5.0,
+            sigma_prior_omega=2.0,
+        )
+        val_reg = nll_reg_func(theta)
+
+        expected_penalty = 0.5 * ((-6.0 - (-5.0)) / 2.0) ** 2  # 0.125
+        assert np.allclose(val_reg, val_raw + expected_penalty)
