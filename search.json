@@ -1,0 +1,536 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "transieve",
+    "section": "",
+    "text": "transieve is a research package for detecting single-transit events in stellar light curves, combining empirical transit models, Gaussian-process noise modelling, and matched-filter diagnostics.",
+    "crumbs": [
+      "Getting Started",
+      "Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#features",
+    "href": "index.html#features",
+    "title": "transieve",
+    "section": "Features",
+    "text": "Features\n\n\nTransit Modelling\nEmpirical and limb-darkened transit models via batman, with a validated LightCurve container and synthetic light-curve generation.\n\n\nGP Noise Modelling\nFit SHO and exponential GP families with celerite2. Characterise correlated noise and assess hyperparameter stability with 2D scan maps.\n\n\nMatched-Filter Detection\nExact GP-inverse matched filtering with white-noise baselines. Evaluate Z-scores, recovery fractions, and detectability depth over template banks.",
+    "crumbs": [
+      "Getting Started",
+      "Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#installation",
+    "href": "index.html#installation",
+    "title": "transieve",
+    "section": "Installation",
+    "text": "Installation\nClone the repository and install in editable mode:\ngit clone https://github.com/dgegen/transieve.git\ncd transieve\nuv sync",
+    "crumbs": [
+      "Getting Started",
+      "Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#learn-more",
+    "href": "index.html#learn-more",
+    "title": "transieve",
+    "section": "Learn more",
+    "text": "Learn more\n\nGP Noise Modelling tutorial — visualise kernel structure and matched-filter calibration\nRetrievability Demo — end-to-end recovery assessment on synthetic data\nAPI Reference — full documentation of all public classes and functions",
+    "crumbs": [
+      "Getting Started",
+      "Overview"
+    ]
+  },
+  {
+    "objectID": "tutorials/retrievability_synthetic_demo.html",
+    "href": "tutorials/retrievability_synthetic_demo.html",
+    "title": "Retrievability Demo on a Synthetic Light Curve",
+    "section": "",
+    "text": "This notebook demonstrates the retrievability APIs and how the matched-filter Z-score behaves under different noise model assumptions:\nThe Z-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters typically provides the most reliable detection metric.\nimport numpy as np\nimport matplotlib.pyplot as plt\nimport time as python_time\n\nfrom transieve import SimulatedLightCurve\nfrom transieve.gp import (\n    SHOGPFamily,\n    evaluate_frequentist_detection,\n    scan_gp_stability_map,\n    TransitVettingPolicy,\n)\nfrom transieve.transit import get_monotransit_from_epoch\n\nimport plotting as plm",
+    "crumbs": [
+      "Tutorials",
+      "Retrievability Demo"
+    ]
+  },
+  {
+    "objectID": "tutorials/retrievability_synthetic_demo.html#build-a-synthetic-light-curve",
+    "href": "tutorials/retrievability_synthetic_demo.html#build-a-synthetic-light-curve",
+    "title": "Retrievability Demo on a Synthetic Light Curve",
+    "section": "Build a synthetic light curve",
+    "text": "Build a synthetic light curve\nWe generate a light curve with an injected monotransit and correlated stellar noise (modelled as a Simple Harmonic Oscillator GP).\n\nplanet_params = {\n    \"depth\": (3 / (1 * 109)) ** 2,\n    \"epoch\": 0.0,\n    \"duration\": 0.2,\n    \"period\": 100.0,\n}\n\ngp_params = {\n    \"log_omega\": np.log(2 * np.pi / 4),\n    \"log_sigma\": np.log(5e-4),\n    \"log_quality\": np.log(1 / np.sqrt(2)),\n    \"log_jitter\": np.log(1e-3),\n}\n\nlc = SimulatedLightCurve.from_transit(\n    **planet_params,\n    gp_params=gp_params,\n    baseline=15,\n    seed=0,\n    multiply_signal=False,\n    gap_windows=[[1, 2]],\n)\n\ntime, flux = lc.time, lc.flux\ntrue_signal = lc.deterministic_component\n\n\n_, axes = plm.subplots(3, 1, sharex=True, rescale_height=0.4)\n_ = lc.plot(axes)",
+    "crumbs": [
+      "Tutorials",
+      "Retrievability Demo"
+    ]
+  },
+  {
+    "objectID": "tutorials/retrievability_synthetic_demo.html#baseline-retrievability-with-fitted-gp",
+    "href": "tutorials/retrievability_synthetic_demo.html#baseline-retrievability-with-fitted-gp",
+    "title": "Retrievability Demo on a Synthetic Light Curve",
+    "section": "Baseline retrievability with fitted GP",
+    "text": "Baseline retrievability with fitted GP\nWe fit an SHO GP to the light curve (finding the MLE hyperparameters) and evaluate the matched filter over a bank of transit epochs. This provides our primary detection metric: the Z-score timeline.\n\ngp_family = SHOGPFamily(jitter_range=(1e-6, 1e-2))\n\ntemplate_generator = get_monotransit_from_epoch(\n    time,\n    depth=planet_params[\"depth\"],\n    duration=planet_params[\"duration\"],\n    period=planet_params[\"period\"],\n    mean=0.0,\n)\n\n# We use Scipy's global differential_evolution optimizer (transieve's default)\n# to find the global MLE parameters without needing to seed it with the true parameters.\nretr = evaluate_frequentist_detection(\n    time=time,\n    flux=flux,\n    template_bank=template_generator,\n    gp_family=gp_family,\n    fit_mean=1.0,\n    fit_method=\"differential_evolution\",\n    fit_max_retries=1,\n    threshold=4,\n)\n\npeak_idx, peak_z = retr.strongest_match()\npeak_time = retr.time[peak_idx]\nprint(f\"Peak Z-score: {peak_z:.3f} at t = {peak_time:.3f} d\")\nprint(\"Recovered GP parameters:\", retr.gp_physical_params)\n\nPeak Z-score: 5.355 at t = 0.003 d\nRecovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.float64(0.0007235818446203121), 'quality': np.float64(0.5000040923318889), 'jitter': np.float64(0.0009794266263686814)}\n\n\n\nfig, axes = plm.subplots(2, 1, sharex=True, rescale_height=0.6)\n\n# Plot flux with highlighted transit\naxes[0].plot(time, flux, marker=\".\", ls=\"\", color=\"C0\", alpha=0.5, ms=3, label=\"Flux\")\naxes[0].axvline(peak_time, color=\"C3\", ls=\":\", alpha=0.8)\naxes[0].axvspan(\n    peak_time - planet_params[\"duration\"] / 2,\n    peak_time + planet_params[\"duration\"] / 2,\n    color=\"C3\",\n    alpha=0.1,\n)\naxes[0].set_ylabel(\"Relative Flux\")\n\n# Plot Z-score timeline\naxes[1].plot(retr.time, retr.z_score, color=\"C0\", lw=1.2)\naxes[1].axvline(peak_time, color=\"C3\", ls=\":\", alpha=0.8)\naxes[1].axvspan(\n    peak_time - planet_params[\"duration\"] / 2,\n    peak_time + planet_params[\"duration\"] / 2,\n    color=\"C3\",\n    alpha=0.1,\n)\naxes[1].set_ylabel(\"Z-score\")\naxes[1].axhline(0, color=\"gray\", ls=\"-\", alpha=0.5, lw=0.8)\naxes[1].axhline(5, color=\"red\", lw=1.2, ls=\"--\", label=r\"5$\\sigma$ Threshold\")\naxes[1].set_xlabel(\"Template epoch [days]\")\naxes[1].legend(loc=\"upper right\")\n\nplt.tight_layout()",
+    "crumbs": [
+      "Tutorials",
+      "Retrievability Demo"
+    ]
+  },
+  {
+    "objectID": "tutorials/retrievability_synthetic_demo.html#gp-misspecification-and-the-stability-landscape",
+    "href": "tutorials/retrievability_synthetic_demo.html#gp-misspecification-and-the-stability-landscape",
+    "title": "Retrievability Demo on a Synthetic Light Curve",
+    "section": "GP misspecification and the stability landscape",
+    "text": "GP misspecification and the stability landscape\nWhat happens if we fix the noise model to the wrong hyperparameters? We scan the GP sigma and period (timescale) to see how they impact detection likelihood and Z-score.\n\nToo flexible (e.g. short period): The GP might overfit and absorb the transit itself.\nToo rigid (e.g. long period): The GP underfits stellar variability, inflating the noise floor.\n\n\nsigma_grid = np.geomspace(2e-4, 3e-3, 20)\nperiod_grid = np.geomspace(0.2, 40.0, 24)\n\ntemplate_fixed = true_signal - 1.0\ntic = python_time.time()\n# For the stability grid scan, we use fast local L-BFGS-B optimization\n# at each grid point to optimize the remaining parameters.\nstab = scan_gp_stability_map(\n    time=time,\n    flux=flux,\n    template=template_fixed,\n    gp_family=gp_family,\n    sigma_grid=sigma_grid,\n    timescale_grid=period_grid,\n    fit_mean=1.0,\n    fit_method=\"L-BFGS-B\",\n    fit_max_retries=1,\n)\ntoc = python_time.time()\nprint(f\"Stability map computed in {toc - tic:.1f} seconds\")\n\nStability map computed in 0.3 seconds\n\n\n\nX, Y = np.meshgrid(stab.timescale_grid, stab.sigma_grid)\n\n# Set rescale_height=1.6 so that subplots are approximately square\nfig, axes = plm.subplots(1, 2, sharex=True, sharey=True, rescale_height=1.6)\n\nim0 = axes[0].pcolormesh(X, Y, stab.z_score, shading=\"auto\", cmap=\"viridis\")\naxes[0].set_title(\"Peak Z-score\")\nfig.colorbar(im0, ax=axes[0])\n\nlog_L = stab.log_marginal_likelihood\n# Show delta log likelihood relative to max\nim1 = axes[1].pcolormesh(X, Y, log_L - np.nanmax(log_L), shading=\"auto\", cmap=\"plasma\")\n# Draw smooth contour at continuous Z=5\naxes[1].contour(X, Y, stab.z_score, levels=[5.0], colors=\"white\", linewidths=1.5)\naxes[1].set_title(r\"$\\Delta \\ln \\mathcal{L}$\")\nfig.colorbar(im1, ax=axes[1])\n\nfor ax in axes:\n    ax.set_xscale(\"log\")\n    ax.set_yscale(\"log\")\n    ax.set_xlabel(f\"{stab.timescale_name} [days]\")\naxes[0].set_ylabel(\"sigma\")\n\nplt.tight_layout()\n\n\n\n\n\n\n\n\n\nReading the stability map\n\nLog-marginal likelihood — how well each combination explains the data without the transit template.\nPeak Z-score — where the matched-filter response is strongest.\n\nThe highest likelihood region does not always yield the highest Z-score. An excessively flexible GP achieves high likelihood by fitting the transit as noise, destructively suppressing the Z-score.",
+    "crumbs": [
+      "Tutorials",
+      "Retrievability Demo"
+    ]
+  },
+  {
+    "objectID": "tutorials/retrievability_synthetic_demo.html#vetting-policy",
+    "href": "tutorials/retrievability_synthetic_demo.html#vetting-policy",
+    "title": "Retrievability Demo on a Synthetic Light Curve",
+    "section": "Vetting Policy",
+    "text": "Vetting Policy\nWe can use TransitVettingPolicy to ensure the detection crosses our significance threshold and hasn’t been absorbed by the GP.\n\npolicy = TransitVettingPolicy(z_threshold=4.0, recovery_fraction_cutoff=0.5)\nverdict = policy.validate(retr, injected_time=planet_params[\"epoch\"])\n\nprint(\"Passed Vetting:\", verdict.passed)\nprint(\"Vetting Report:\")\nfor k, v in verdict.report.items():\n    print(f\"  {k}: {v}\")\n\nPassed Vetting: True\nVetting Report:\n  index: 1079\n  z: 5.292754157105563\n  z_threshold: 4.0\n  recovery: 1.3321784037975721\n  recovery_fraction_cutoff: 0.5\n  significance_ok: True\n  recovery_ok: True",
+    "crumbs": [
+      "Tutorials",
+      "Retrievability Demo"
+    ]
+  },
+  {
+    "objectID": "reference/gp.ExpGPFamily.html",
+    "href": "reference/gp.ExpGPFamily.html",
+    "title": "gp.ExpGPFamily",
+    "section": "",
+    "text": "gp.ExpGPFamily\ngp.ExpGPFamily(\n    scale_range=(0.1, 100.0),\n    sigma_range=(1e-05, 0.001),\n    jitter_range=None,\n)"
+  },
+  {
+    "objectID": "reference/gp.TransitVettingPolicy.html",
+    "href": "reference/gp.TransitVettingPolicy.html",
+    "title": "gp.TransitVettingPolicy",
+    "section": "",
+    "text": "gp.TransitVettingPolicy(\n    z_threshold=7.0,\n    recovery_fraction_cutoff=0.5,\n    ln_b_threshold=0.0,\n)\nUser-defined threshold bundle for transit vetting decisions.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nz_threshold\nfloat\nMinimum matched-filter Z-score to pass the significance gate.\n7.0\n\n\nrecovery_fraction_cutoff\nfloat\nMinimum recovery fraction at the target epoch.\n0.5\n\n\nln_b_threshold\nfloat\nMinimum log Bayes factor when vetting via a GPStabilityMap with populated log_bf_global.\n0.0\n\n\n\n\n\n\n\n\n\nName\nDescription\n\n\n\n\nvalidate\nApply threshold gates and return a structured verdict.\n\n\n\n\n\ngp.TransitVettingPolicy.validate(result, injected_time=None)\nApply threshold gates and return a structured verdict.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nresult\nFrequentistDetectionResult | GPStabilityMap\nEither a FrequentistDetectionResult (Z-score path) or a GPStabilityMap (posterior-marginalised path).\nrequired\n\n\ninjected_time\nfloat | None\nIf provided, evaluate at the closest epoch; otherwise evaluate at the strongest-match index.\nNone\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nVettingResult\nNamed tuple with passed: bool and report: dict."
+  },
+  {
+    "objectID": "reference/gp.TransitVettingPolicy.html#parameters",
+    "href": "reference/gp.TransitVettingPolicy.html#parameters",
+    "title": "gp.TransitVettingPolicy",
+    "section": "",
+    "text": "Name\nType\nDescription\nDefault\n\n\n\n\nz_threshold\nfloat\nMinimum matched-filter Z-score to pass the significance gate.\n7.0\n\n\nrecovery_fraction_cutoff\nfloat\nMinimum recovery fraction at the target epoch.\n0.5\n\n\nln_b_threshold\nfloat\nMinimum log Bayes factor when vetting via a GPStabilityMap with populated log_bf_global.\n0.0"
+  },
+  {
+    "objectID": "reference/gp.TransitVettingPolicy.html#methods",
+    "href": "reference/gp.TransitVettingPolicy.html#methods",
+    "title": "gp.TransitVettingPolicy",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nvalidate\nApply threshold gates and return a structured verdict.\n\n\n\n\n\ngp.TransitVettingPolicy.validate(result, injected_time=None)\nApply threshold gates and return a structured verdict.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nresult\nFrequentistDetectionResult | GPStabilityMap\nEither a FrequentistDetectionResult (Z-score path) or a GPStabilityMap (posterior-marginalised path).\nrequired\n\n\ninjected_time\nfloat | None\nIf provided, evaluate at the closest epoch; otherwise evaluate at the strongest-match index.\nNone\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nVettingResult\nNamed tuple with passed: bool and report: dict."
+  },
+  {
+    "objectID": "reference/gp.BayesianDetectionResult.html",
+    "href": "reference/gp.BayesianDetectionResult.html",
+    "title": "gp.BayesianDetectionResult",
+    "section": "",
+    "text": "gp.BayesianDetectionResult\ngp.BayesianDetectionResult(\n    time,\n    log_bayes_factor,\n    template_norm,\n    log_bayes_factor_global,\n    gp_theta,\n    gp_physical_params,\n    gp_optimization_result,\n)\nBayes-factor retrievability summary for a single parameter profile.\nArrays are indexed in the same order as the template bank evaluation. For callable template banks this is the order of the provided time array."
+  },
+  {
+    "objectID": "reference/gp.VettingResult.html",
+    "href": "reference/gp.VettingResult.html",
+    "title": "gp.VettingResult",
+    "section": "",
+    "text": "gp.VettingResult\ngp.VettingResult()"
+  },
+  {
+    "objectID": "reference/gp.evaluate_bayesian_detection.html",
+    "href": "reference/gp.evaluate_bayesian_detection.html",
+    "title": "gp.evaluate_bayesian_detection",
+    "section": "",
+    "text": "gp.evaluate_bayesian_detection\ngp.evaluate_bayesian_detection(\n    time,\n    flux,\n    template_bank,\n    sigma_a,\n    flux_err=None,\n    gp_family=None,\n    fit_mean=0.0,\n    fit_method='differential_evolution',\n    fit_max_retries=2,\n    fit_kwargs=None,\n    center_flux=True,\n    prior='gaussian',\n    amplitude_bounds=None,\n    log_template_weights=None,\n)\nAssess retrievability for a template bank using log Bayes factors.\nFits a GP to the provided light curve, computes the analytic log Bayes factor for each template, and marginalizes across the template bank using log-sum-exp."
+  },
+  {
+    "objectID": "reference/gp.MatchedFilter.html",
+    "href": "reference/gp.MatchedFilter.html",
+    "title": "gp.MatchedFilter",
+    "section": "",
+    "text": "gp.MatchedFilter(gp, flux, check_zero_centered=True)\nMatched-filter Z-score utilities for correlated-noise light curves.\nThe noise model is represented by a pre-computed celerite2.GaussianProcess. Given a template s and observed data y, this class computes statistics based on the standard matched-filter expressions:\n\ntemplate amplitude (norm): sqrt(s^T C^-1 s)\nprojected template: y^T C^-1 s\nZ-score: (y^T C^-1 s) / sqrt(s^T C^-1 s)\n\n\n\n\nz_score_map evaluates templates exactly.\nz_score_map_fft is a fast convolution-based approximation for nearly uniform cadence and stationary noise assumptions.\n\n\n\n\nTemplates are assumed to be locally compact — e.g. a single transit dip that decays to zero well within the observation baseline.\n\n\n\n\n\n\nName\nDescription\n\n\n\n\napply_inverse_variance\nApply the GP inverse covariance operator to vector (C^-1 * v).\n\n\ncompute_sensitivity_limits\nMinimum detectable transit depth under ideal and realization-adjusted conditions.\n\n\nlog_bayes_factor\nCompute log Bayes factor for a single template.\n\n\nlog_bayes_factor_map\nCompute log Bayes factors for a template bank over epochs.\n\n\nlog_bayes_factor_matrix\nBatch log Bayes factors for a pre-materialized template array.\n\n\nmatrix_metrics\nVectorized template_metrics for a pre-materialized template array.\n\n\ntemplate_metrics\nCompute matched-filter and white-noise metrics for a single template.\n\n\ntemplate_norm_and_projection\nReturn template norm and whitened template for template.\n\n\ntemplate_projection_and_norm\nReturn (y^T C^-1 s, sqrt(s^T C^-1 s)) for template.\n\n\nwhite_noise_template_norm\nCompute the precision-weighted template norm under a white-noise approximation.\n\n\nwhite_noise_z_score\nMatched-filter Z-score under a diagonal (white-noise) approximation.\n\n\nwhiten\nApply the GP whitening transform z = D^{-1/2} L^{-1} v.\n\n\nz_score\nCompute scalar matched-filter Z-score for a single template.\n\n\nz_score_map\nCompute Z-scores for a template bank over a grid of epochs.\n\n\nz_score_map_fft\nCompute an FFT-based Z-score time series for one reference template.\n\n\n\n\n\ngp.MatchedFilter.apply_inverse_variance(vector)\nApply the GP inverse covariance operator to vector (C^-1 * v).\n\n\n\ngp.MatchedFilter.compute_sensitivity_limits(template_or_matrix, z_threshold)\nMinimum detectable transit depth under ideal and realization-adjusted conditions.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_or_matrix\n(ndarray, shape(N) or (N, M))\nSingle template (1D) or pre-materialized matrix (2D).\nrequired\n\n\nz_threshold\nfloat\nTarget detection significance.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with keys:\nideal : scalar or (M,) array z_threshold / sigma_s — the depth needed assuming zero background noise. realization_adjusted : scalar or (M,) array (z_threshold - Z_bg) / sigma_s — additional depth needed given the current noise fluctuation at each epoch.\n\n\n\n\n\n\n\ngp.MatchedFilter.log_bayes_factor(\n    template,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n    inject_template=False,\n)\nCompute log Bayes factor for a single template.\nThe amplitude prior is Gaussian by default (two-sided, mean 0). Use prior='half-normal' for positive-only depths or prior='uniform' with amplitude_bounds to define a bounded prior.\n\n\n\ngp.MatchedFilter.log_bayes_factor_map(\n    template_bank,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n)\nCompute log Bayes factors for a template bank over epochs.\n\n\n\ngp.MatchedFilter.log_bayes_factor_matrix(\n    template_matrix,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n)\nBatch log Bayes factors for a pre-materialized template array.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_matrix\n(ndarray, shape(N, M) or (N, M_dur, t_transit))\nFor multi-dimensional template spaces pass a 3-D array; output preserves the trailing shape.\nrequired\n\n\nsigma_a\nfloat\nStandard deviation of the amplitude prior.\nrequired\n\n\nprior\nstr\n“gaussian”, “half-normal”, or “uniform”.\n'gaussian'\n\n\namplitude_bounds\ntuple[float, float] | None\nRequired when prior=“uniform”.\nNone\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nndarray, shape template_matrix.shape\\[1:\\]\nLog Bayes factor for each template.\n\n\n\n\n\n\n\ngp.MatchedFilter.matrix_metrics(template_matrix)\nVectorized template_metrics for a pre-materialized template array.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_matrix\n(ndarray, shape(N, M) or (N, M_dur, t_transit))\nColumns/slices are individual templates, all of length N. For multi-dimensional template spaces (e.g. duration × epoch), pass a 3-D array; output arrays preserve the trailing shape.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with same keys as template_metrics() but each value has shape\n\n\n\n\ntemplate_matrix.shape\\[1:\\]:\nz_score, template_norm, z_white_noise, white_template_norm, recovery_fraction, relative_capacity\n\n\n\n\n\n\n\ngp.MatchedFilter.template_metrics(template)\nCompute matched-filter and white-noise metrics for a single template.\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with keys:\nz_score, template_norm, z_white_noise, white_template_norm, recovery_fraction, relative_capacity\n\n\n\n\n\n\n\ngp.MatchedFilter.template_norm_and_projection(template)\nReturn template norm and whitened template for template.\n\n\n\ngp.MatchedFilter.template_projection_and_norm(template, inject_template=False)\nReturn (y^T C^-1 s, sqrt(s^T C^-1 s)) for template.\n\n\n\ngp.MatchedFilter.white_noise_template_norm(template)\nCompute the precision-weighted template norm under a white-noise approximation.\n\n\n\ngp.MatchedFilter.white_noise_z_score(\n    template,\n    baseline=0.0,\n    inject_template=False,\n)\nMatched-filter Z-score under a diagonal (white-noise) approximation.\nUses the GP’s diagonal variance estimate (self.gp._diag) as the per-sample variance and computes the matched-filter projection \\[Z = \\frac{(y - baseline)^T C^{-1} s}{\\sqrt{s^T C^{-1} s}}\\] where \\(y\\) is the stored flux and s is template.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate\nndarray\nTemplate vector (same length as self.flux).\nrequired\n\n\nbaseline\nfloat\nNull-level subtracted from the data.\n0.0\n\n\ninject_template\nbool\nIf True, evaluate on y + template.\nFalse\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\nz_score\nfloat\nMatched-filter Z-score under the diagonal-noise assumption.\n\n\ntemplate_norm\nfloat\nThe precision-weighted template norm (sqrt(s^T C^{-1} s)).\n\n\n\n\n\n\n\ngp.MatchedFilter.whiten(vector)\nApply the GP whitening transform z = D^{-1/2} L^{-1} v.\nDecorrelates and normalizes vector to produce independent, unit-variance samples (innovations). When applied to the residual flux y - mu, the output is the sequence of one-step prediction errors (innovations) scaled by their standard deviations — i.e. each entry is the surprise at time t given all previous observations, in units of its own standard deviation.\nA standard deviation near 1.0 indicates the GP is well-calibrated. Values substantially below 1.0 suggest overfitting; values above 1.0 suggest underfitting.\n\n\n\ngp.MatchedFilter.z_score(template, inject_template=False)\nCompute scalar matched-filter Z-score for a single template.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate\narray - like\nTemplate to match against self.flux.\nrequired\n\n\ninject_template\nbool\nIf True, evaluate on self.flux + template.\nFalse\n\n\n\n\n\n\n\ngp.MatchedFilter.z_score_map(template_bank, epochs=None)\nCompute Z-scores for a template bank over a grid of epochs.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_bank\ncallable or TemplateBank\nIf callable, evaluated at every point in the GP’s stored time array. Pass a :class:TemplateBank to use a custom epoch grid.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nSearchProfile\nZ-scores and template norms, one entry per epoch.\n\n\n\n\n\n\n\ngp.MatchedFilter.z_score_map_fft(template)\nCompute an FFT-based Z-score time series for one reference template.\nThis method assumes that the noise is approximately stationary and that the time sampling is uniform, allowing us to use convolution to compute the matched-filter projection efficiently. The template is assumed to be centered at time zero, and the resulting Z-score map will be aligned with the original time array."
+  },
+  {
+    "objectID": "reference/gp.MatchedFilter.html#notes",
+    "href": "reference/gp.MatchedFilter.html#notes",
+    "title": "gp.MatchedFilter",
+    "section": "",
+    "text": "z_score_map evaluates templates exactly.\nz_score_map_fft is a fast convolution-based approximation for nearly uniform cadence and stationary noise assumptions."
+  },
+  {
+    "objectID": "reference/gp.MatchedFilter.html#template-assumptions",
+    "href": "reference/gp.MatchedFilter.html#template-assumptions",
+    "title": "gp.MatchedFilter",
+    "section": "",
+    "text": "Templates are assumed to be locally compact — e.g. a single transit dip that decays to zero well within the observation baseline."
+  },
+  {
+    "objectID": "reference/gp.MatchedFilter.html#methods",
+    "href": "reference/gp.MatchedFilter.html#methods",
+    "title": "gp.MatchedFilter",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\napply_inverse_variance\nApply the GP inverse covariance operator to vector (C^-1 * v).\n\n\ncompute_sensitivity_limits\nMinimum detectable transit depth under ideal and realization-adjusted conditions.\n\n\nlog_bayes_factor\nCompute log Bayes factor for a single template.\n\n\nlog_bayes_factor_map\nCompute log Bayes factors for a template bank over epochs.\n\n\nlog_bayes_factor_matrix\nBatch log Bayes factors for a pre-materialized template array.\n\n\nmatrix_metrics\nVectorized template_metrics for a pre-materialized template array.\n\n\ntemplate_metrics\nCompute matched-filter and white-noise metrics for a single template.\n\n\ntemplate_norm_and_projection\nReturn template norm and whitened template for template.\n\n\ntemplate_projection_and_norm\nReturn (y^T C^-1 s, sqrt(s^T C^-1 s)) for template.\n\n\nwhite_noise_template_norm\nCompute the precision-weighted template norm under a white-noise approximation.\n\n\nwhite_noise_z_score\nMatched-filter Z-score under a diagonal (white-noise) approximation.\n\n\nwhiten\nApply the GP whitening transform z = D^{-1/2} L^{-1} v.\n\n\nz_score\nCompute scalar matched-filter Z-score for a single template.\n\n\nz_score_map\nCompute Z-scores for a template bank over a grid of epochs.\n\n\nz_score_map_fft\nCompute an FFT-based Z-score time series for one reference template.\n\n\n\n\n\ngp.MatchedFilter.apply_inverse_variance(vector)\nApply the GP inverse covariance operator to vector (C^-1 * v).\n\n\n\ngp.MatchedFilter.compute_sensitivity_limits(template_or_matrix, z_threshold)\nMinimum detectable transit depth under ideal and realization-adjusted conditions.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_or_matrix\n(ndarray, shape(N) or (N, M))\nSingle template (1D) or pre-materialized matrix (2D).\nrequired\n\n\nz_threshold\nfloat\nTarget detection significance.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with keys:\nideal : scalar or (M,) array z_threshold / sigma_s — the depth needed assuming zero background noise. realization_adjusted : scalar or (M,) array (z_threshold - Z_bg) / sigma_s — additional depth needed given the current noise fluctuation at each epoch.\n\n\n\n\n\n\n\ngp.MatchedFilter.log_bayes_factor(\n    template,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n    inject_template=False,\n)\nCompute log Bayes factor for a single template.\nThe amplitude prior is Gaussian by default (two-sided, mean 0). Use prior='half-normal' for positive-only depths or prior='uniform' with amplitude_bounds to define a bounded prior.\n\n\n\ngp.MatchedFilter.log_bayes_factor_map(\n    template_bank,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n)\nCompute log Bayes factors for a template bank over epochs.\n\n\n\ngp.MatchedFilter.log_bayes_factor_matrix(\n    template_matrix,\n    sigma_a,\n    prior='gaussian',\n    amplitude_bounds=None,\n)\nBatch log Bayes factors for a pre-materialized template array.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_matrix\n(ndarray, shape(N, M) or (N, M_dur, t_transit))\nFor multi-dimensional template spaces pass a 3-D array; output preserves the trailing shape.\nrequired\n\n\nsigma_a\nfloat\nStandard deviation of the amplitude prior.\nrequired\n\n\nprior\nstr\n“gaussian”, “half-normal”, or “uniform”.\n'gaussian'\n\n\namplitude_bounds\ntuple[float, float] | None\nRequired when prior=“uniform”.\nNone\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nndarray, shape template_matrix.shape\\[1:\\]\nLog Bayes factor for each template.\n\n\n\n\n\n\n\ngp.MatchedFilter.matrix_metrics(template_matrix)\nVectorized template_metrics for a pre-materialized template array.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_matrix\n(ndarray, shape(N, M) or (N, M_dur, t_transit))\nColumns/slices are individual templates, all of length N. For multi-dimensional template spaces (e.g. duration × epoch), pass a 3-D array; output arrays preserve the trailing shape.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with same keys as template_metrics() but each value has shape\n\n\n\n\ntemplate_matrix.shape\\[1:\\]:\nz_score, template_norm, z_white_noise, white_template_norm, recovery_fraction, relative_capacity\n\n\n\n\n\n\n\ngp.MatchedFilter.template_metrics(template)\nCompute matched-filter and white-noise metrics for a single template.\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\ndict with keys:\nz_score, template_norm, z_white_noise, white_template_norm, recovery_fraction, relative_capacity\n\n\n\n\n\n\n\ngp.MatchedFilter.template_norm_and_projection(template)\nReturn template norm and whitened template for template.\n\n\n\ngp.MatchedFilter.template_projection_and_norm(template, inject_template=False)\nReturn (y^T C^-1 s, sqrt(s^T C^-1 s)) for template.\n\n\n\ngp.MatchedFilter.white_noise_template_norm(template)\nCompute the precision-weighted template norm under a white-noise approximation.\n\n\n\ngp.MatchedFilter.white_noise_z_score(\n    template,\n    baseline=0.0,\n    inject_template=False,\n)\nMatched-filter Z-score under a diagonal (white-noise) approximation.\nUses the GP’s diagonal variance estimate (self.gp._diag) as the per-sample variance and computes the matched-filter projection \\[Z = \\frac{(y - baseline)^T C^{-1} s}{\\sqrt{s^T C^{-1} s}}\\] where \\(y\\) is the stored flux and s is template.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate\nndarray\nTemplate vector (same length as self.flux).\nrequired\n\n\nbaseline\nfloat\nNull-level subtracted from the data.\n0.0\n\n\ninject_template\nbool\nIf True, evaluate on y + template.\nFalse\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\nz_score\nfloat\nMatched-filter Z-score under the diagonal-noise assumption.\n\n\ntemplate_norm\nfloat\nThe precision-weighted template norm (sqrt(s^T C^{-1} s)).\n\n\n\n\n\n\n\ngp.MatchedFilter.whiten(vector)\nApply the GP whitening transform z = D^{-1/2} L^{-1} v.\nDecorrelates and normalizes vector to produce independent, unit-variance samples (innovations). When applied to the residual flux y - mu, the output is the sequence of one-step prediction errors (innovations) scaled by their standard deviations — i.e. each entry is the surprise at time t given all previous observations, in units of its own standard deviation.\nA standard deviation near 1.0 indicates the GP is well-calibrated. Values substantially below 1.0 suggest overfitting; values above 1.0 suggest underfitting.\n\n\n\ngp.MatchedFilter.z_score(template, inject_template=False)\nCompute scalar matched-filter Z-score for a single template.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate\narray - like\nTemplate to match against self.flux.\nrequired\n\n\ninject_template\nbool\nIf True, evaluate on self.flux + template.\nFalse\n\n\n\n\n\n\n\ngp.MatchedFilter.z_score_map(template_bank, epochs=None)\nCompute Z-scores for a template bank over a grid of epochs.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntemplate_bank\ncallable or TemplateBank\nIf callable, evaluated at every point in the GP’s stored time array. Pass a :class:TemplateBank to use a custom epoch grid.\nrequired\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nSearchProfile\nZ-scores and template norms, one entry per epoch.\n\n\n\n\n\n\n\ngp.MatchedFilter.z_score_map_fft(template)\nCompute an FFT-based Z-score time series for one reference template.\nThis method assumes that the noise is approximately stationary and that the time sampling is uniform, allowing us to use convolution to compute the matched-filter projection efficiently. The template is assumed to be centered at time zero, and the resulting Z-score map will be aligned with the original time array."
+  },
+  {
+    "objectID": "reference/gp.MultiProfileBayesianDetectionResult.html",
+    "href": "reference/gp.MultiProfileBayesianDetectionResult.html",
+    "title": "gp.MultiProfileBayesianDetectionResult",
+    "section": "",
+    "text": "gp.MultiProfileBayesianDetectionResult(\n    time,\n    log_bayes_factor,\n    template_norm,\n    log_bayes_factor_global,\n    gp_theta,\n    gp_physical_params,\n    gp_optimization_result,\n    log_bayes_factor_tensor,\n)\nBayesian summary evaluating M nuisance-parameter profile realizations.\nlog_bayes_factor_tensor carries the full (M, t_transit) tensor. log_bayes_factor holds the profile-marginalized (t_transit,) summary (logsumexp over M with a uniform profile prior).\n\n\n\n\n\nName\nDescription\n\n\n\n\nmarginalized_log_bf\n(t_transit,): uniform-prior marginalization over the profile axis M."
+  },
+  {
+    "objectID": "reference/gp.MultiProfileBayesianDetectionResult.html#attributes",
+    "href": "reference/gp.MultiProfileBayesianDetectionResult.html#attributes",
+    "title": "gp.MultiProfileBayesianDetectionResult",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nmarginalized_log_bf\n(t_transit,): uniform-prior marginalization over the profile axis M."
+  },
+  {
+    "objectID": "reference/LightCurve.html",
+    "href": "reference/LightCurve.html",
+    "title": "LightCurve",
+    "section": "",
+    "text": "LightCurve(time, flux, flux_err=None, mean=None)\nValidated light-curve container used by low-level GP routines.\n\n\n\n\n\nName\nDescription\n\n\n\n\ncentered_flux\nReturn flux optionally centered by its median.\n\n\n\n\n\nLightCurve.centered_flux(center=True)\nReturn flux optionally centered by its median."
+  },
+  {
+    "objectID": "reference/LightCurve.html#methods",
+    "href": "reference/LightCurve.html#methods",
+    "title": "LightCurve",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\ncentered_flux\nReturn flux optionally centered by its median.\n\n\n\n\n\nLightCurve.centered_flux(center=True)\nReturn flux optionally centered by its median."
+  },
+  {
+    "objectID": "reference/gp.SHOGPFamily.html",
+    "href": "reference/gp.SHOGPFamily.html",
+    "title": "gp.SHOGPFamily",
+    "section": "",
+    "text": "gp.SHOGPFamily\ngp.SHOGPFamily(\n    period_range=(0.1, 30.0),\n    sigma_range=(1e-05, 0.001),\n    quality_range=(0.5, 10.0),\n    omega_range=None,\n    jitter_range=None,\n)"
+  },
+  {
+    "objectID": "reference/gp.TemplateBank.html",
+    "href": "reference/gp.TemplateBank.html",
+    "title": "gp.TemplateBank",
+    "section": "",
+    "text": "gp.TemplateBank(make, epochs)\nA callable template factory paired with its evaluation epochs.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nmake\nCallable[[float], np.ndarray]\nTemplate factory. Called as make(epoch) and must return an array of the same length as the observation time vector.\nrequired\n\n\nepochs\nnp.ndarray\nTransit-center times (or other parameter values) at which to evaluate func. These become the time axis of any result statistics.\nrequired"
+  },
+  {
+    "objectID": "reference/gp.TemplateBank.html#parameters",
+    "href": "reference/gp.TemplateBank.html#parameters",
+    "title": "gp.TemplateBank",
+    "section": "",
+    "text": "Name\nType\nDescription\nDefault\n\n\n\n\nmake\nCallable[[float], np.ndarray]\nTemplate factory. Called as make(epoch) and must return an array of the same length as the observation time vector.\nrequired\n\n\nepochs\nnp.ndarray\nTransit-center times (or other parameter values) at which to evaluate func. These become the time axis of any result statistics.\nrequired"
+  },
+  {
+    "objectID": "reference/gp.FrequentistDetectionResult.html",
+    "href": "reference/gp.FrequentistDetectionResult.html",
+    "title": "gp.FrequentistDetectionResult",
+    "section": "",
+    "text": "gp.FrequentistDetectionResult(\n    time,\n    z_score,\n    template_norm,\n    z_white_noise,\n    recovery_fraction,\n    relative_capacity,\n    depth_to_threshold,\n    sensitivity,\n    detection_threshold,\n    gp_theta,\n    gp_physical_params,\n    gp_optimization_result,\n)\nMatched-filter retrievability summary for a single parameter profile.\nArrays are indexed in the same order as the template bank evaluation. For callable template banks this is the order of the provided time array.\n\n\n\n\n\nName\nDescription\n\n\n\n\nwhite_template_norm\nBaseline template norm in white noise."
+  },
+  {
+    "objectID": "reference/gp.FrequentistDetectionResult.html#attributes",
+    "href": "reference/gp.FrequentistDetectionResult.html#attributes",
+    "title": "gp.FrequentistDetectionResult",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nwhite_template_norm\nBaseline template norm in white noise."
+  },
+  {
+    "objectID": "reference/SimulatedLightCurve.html",
+    "href": "reference/SimulatedLightCurve.html",
+    "title": "SimulatedLightCurve",
+    "section": "",
+    "text": "SimulatedLightCurve(\n    time,\n    flux,\n    flux_err,\n    deterministic_component,\n    gp_component,\n    gp_model,\n    deterministic_model,\n    signal_params,\n    gp_params,\n)\n\n\n\n\n\nName\nDescription\n\n\n\n\nfrom_model\nGeneric simulation factory. Combine any signal_factory with SHO GP noise.\n\n\nfrom_transit\nConvenience factory for monotransit simulations.\n\n\nplot\nPlot the simulated light curve and its components.\n\n\nwith_gaps\nReturn a new SimulatedLightCurve with observational gaps applied.\n\n\n\n\n\nSimulatedLightCurve.from_model(\n    signal_params,\n    gp_params,\n    signal_factory,\n    time=None,\n    baseline=15,\n    cadence=10,\n    gap_windows=None,\n    multiply_signal=True,\n    gp_family=None,\n    seed=None,\n)\nGeneric simulation factory. Combine any signal_factory with SHO GP noise.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nsignal_params\ndict\nParameters forwarded to signal_factory.\nrequired\n\n\ngp_params\ndict\nParameters forwarded to gp_family.build().\nrequired\n\n\nsignal_factory\ncallable\nFunction(**signal_params) -&gt; callable(time) -&gt; flux array.\nrequired\n\n\n\n\n\n\n\nSimulatedLightCurve.from_transit(\n    epoch=0,\n    depth=(3 / 109) ** 2,\n    duration=0.2,\n    period=100.0,\n    model='empirical',\n    u=(0.3, 0.1),\n    impact_param=0.0,\n    limb_dark='quadratic',\n    gp_params={},\n    **kwargs,\n)\nConvenience factory for monotransit simulations.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nepoch\nfloat\nTransit midpoint time.\n0\n\n\ndepth\nfloat\nTransit depth (fractional flux decrement).\n(3 / 109) ** 2\n\n\nduration\nfloat\nTransit duration in days.\n0.2\n\n\nperiod\nfloat\nOrbital period in days.\n100.0\n\n\nmodel\n(empirical, limb_dark)\nTransit model. “empirical” uses the Protopapas et al. 2005 tanh shape; “limb_dark” uses a batman quadratic limb-darkened model.\n\"empirical\"\n\n\nu\ntuple\nLimb-darkening coefficients (only used when model=“limb_dark”).\n(0.3, 0.1)\n\n\nimpact_param\nfloat\nImpact parameter (only used when model=“limb_dark”).\n0.0\n\n\nlimb_dark\nstr\nbatman limb-darkening law (only used when model=“limb_dark”).\n'quadratic'\n\n\ngp_params\ndict\nGP noise parameters. Defaults to DEFAULT_GP_PARAMS.\n{}\n\n\n**kwargs\n\nPassed to from_model (time, baseline, cadence, multiply_signal, gp_family, seed).\n{}\n\n\n\n\n\n\n\nSimulatedLightCurve.plot(axes=None)\nPlot the simulated light curve and its components.\n\n\n\nSimulatedLightCurve.with_gaps(gap_windows, mode='remove')\nReturn a new SimulatedLightCurve with observational gaps applied.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ngap_windows\nlist of (float, float)\nEach entry is a (t_start, t_end) interval to mask. Use generate_gap_windows() to produce random windows.\nrequired\n\n\nmode\n(remove, nan)\n“remove” drops cadences within gaps (non-uniform time grid); “nan” keeps all cadences but sets flux to NaN at gap positions.\n\"remove\"\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nSimulatedLightCurve"
+  },
+  {
+    "objectID": "reference/SimulatedLightCurve.html#methods",
+    "href": "reference/SimulatedLightCurve.html#methods",
+    "title": "SimulatedLightCurve",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nfrom_model\nGeneric simulation factory. Combine any signal_factory with SHO GP noise.\n\n\nfrom_transit\nConvenience factory for monotransit simulations.\n\n\nplot\nPlot the simulated light curve and its components.\n\n\nwith_gaps\nReturn a new SimulatedLightCurve with observational gaps applied.\n\n\n\n\n\nSimulatedLightCurve.from_model(\n    signal_params,\n    gp_params,\n    signal_factory,\n    time=None,\n    baseline=15,\n    cadence=10,\n    gap_windows=None,\n    multiply_signal=True,\n    gp_family=None,\n    seed=None,\n)\nGeneric simulation factory. Combine any signal_factory with SHO GP noise.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nsignal_params\ndict\nParameters forwarded to signal_factory.\nrequired\n\n\ngp_params\ndict\nParameters forwarded to gp_family.build().\nrequired\n\n\nsignal_factory\ncallable\nFunction(**signal_params) -&gt; callable(time) -&gt; flux array.\nrequired\n\n\n\n\n\n\n\nSimulatedLightCurve.from_transit(\n    epoch=0,\n    depth=(3 / 109) ** 2,\n    duration=0.2,\n    period=100.0,\n    model='empirical',\n    u=(0.3, 0.1),\n    impact_param=0.0,\n    limb_dark='quadratic',\n    gp_params={},\n    **kwargs,\n)\nConvenience factory for monotransit simulations.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\nepoch\nfloat\nTransit midpoint time.\n0\n\n\ndepth\nfloat\nTransit depth (fractional flux decrement).\n(3 / 109) ** 2\n\n\nduration\nfloat\nTransit duration in days.\n0.2\n\n\nperiod\nfloat\nOrbital period in days.\n100.0\n\n\nmodel\n(empirical, limb_dark)\nTransit model. “empirical” uses the Protopapas et al. 2005 tanh shape; “limb_dark” uses a batman quadratic limb-darkened model.\n\"empirical\"\n\n\nu\ntuple\nLimb-darkening coefficients (only used when model=“limb_dark”).\n(0.3, 0.1)\n\n\nimpact_param\nfloat\nImpact parameter (only used when model=“limb_dark”).\n0.0\n\n\nlimb_dark\nstr\nbatman limb-darkening law (only used when model=“limb_dark”).\n'quadratic'\n\n\ngp_params\ndict\nGP noise parameters. Defaults to DEFAULT_GP_PARAMS.\n{}\n\n\n**kwargs\n\nPassed to from_model (time, baseline, cadence, multiply_signal, gp_family, seed).\n{}\n\n\n\n\n\n\n\nSimulatedLightCurve.plot(axes=None)\nPlot the simulated light curve and its components.\n\n\n\nSimulatedLightCurve.with_gaps(gap_windows, mode='remove')\nReturn a new SimulatedLightCurve with observational gaps applied.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ngap_windows\nlist of (float, float)\nEach entry is a (t_start, t_end) interval to mask. Use generate_gap_windows() to produce random windows.\nrequired\n\n\nmode\n(remove, nan)\n“remove” drops cadences within gaps (non-uniform time grid); “nan” keeps all cadences but sets flux to NaN at gap positions.\n\"remove\"\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\n\n\n\n\n\nSimulatedLightCurve"
+  },
+  {
+    "objectID": "reference/gp.scan_gp_stability_map.html",
+    "href": "reference/gp.scan_gp_stability_map.html",
+    "title": "gp.scan_gp_stability_map",
+    "section": "",
+    "text": "gp.scan_gp_stability_map(\n    time,\n    flux,\n    template=None,\n    flux_err=None,\n    gp_family=None,\n    sigma_grid=None,\n    timescale_grid=None,\n    fit_mean=0.0,\n    fit_method='differential_evolution',\n    fit_max_retries=2,\n    fit_kwargs=None,\n    theta_dict=None,\n    center_flux=True,\n    reference_time=None,\n    reference_flux=None,\n    reference_flux_err=None,\n    context='local',\n    template_matrix=None,\n    sigma_a=1,\n    prior='gaussian',\n    amplitude_bounds=None,\n    log_template_weights=None,\n    operational_mode='inference',\n    z_threshold=None,\n)\nScan retrievability over a 2D GP hyperparameter grid.\nTwo orthogonal axes control what is computed at each grid point:\nSearch Context (context): \"local\" evaluates matched-filter statistics for a single fixed template at each GP grid point (recoverability / characterization). \"global\" evaluates statistics for a pre-materialized template_matrix of shape (N, M) or (N, M_dur, t_transit) and profiles or marginalises over templates (plausibility / completeness).\nOperational Mode (operational_mode): \"inference\" projects the observed data vector y against covariance-weighted templates to quantify the prominence of a candidate. \"sensitivity\" extracts the deterministic template energy profile (sigma_s = sqrt(s^T C^{-1} s)) to map minimum detectable depths, isolating the noise manifold from the current data realization.\nThe four cells of this 2×2 design:\n\n\n\n\n\n\n\n\n\nLocal Context (fixed t0)\nGlobal Context (free t0 ∈ T)\n\n\n\n\nInference Mode (uses y)\nConditional Z-score and BF at the fixed (s, t0)\nLook-elsewhere max Z-score and marginalized Bayes factor\n\n\nSensitivity Mode (uses C^{-1} only)\nMinimum detectable depth at this exact (s, t0)\nCompleteness map: min depth across all (s, t0) windows\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ncontext\n'local' or 'global'\nSearch context controlling the scope of the template evaluation.\n'local'\n\n\ntemplate\nndarray, required when context=\"local\"\nSingle fixed transit template of length N (cadences).\nNone\n\n\ntemplate_matrix\nndarray, required when context=\"global\"\nPre-materialized template array of shape (N, M) or (N, M_dur, t_transit). When 3-D, z_score_tensor and log_bf_tensor of shape (S, T, M_dur, t_transit) are populated; use the profiled_z_score_map and marginalized_log_bf_map properties to reduce the duration axis.\nNone\n\n\noperational_mode\n'inference' or 'sensitivity'\nOperational mode controlling what question is answered at each grid point.\n'inference'\n\n\nz_threshold\nfloat, required when operational_mode=\"sensitivity\"\nDetection significance threshold used to derive the minimum detectable transit depth. Populates ideal_sensitivity and realization_adjusted_sensitivity on the returned map.\nNone\n\n\nsigma_a\nfloat, required when operational_mode=\"inference\"\nStandard deviation of the Gaussian amplitude prior for log Bayes factor computation.\n1\n\n\nprior\nstr\nAmplitude prior for Bayes factor computation: \"gaussian\", \"half-normal\", or \"uniform\". Only used when operational_mode=\"inference\" and context=\"global\".\n'gaussian'\n\n\namplitude_bounds\ntuple[float, float]\nRequired when prior=\"uniform\".\nNone\n\n\nlog_template_weights\nndarray\nLog-space prior weights over the template bank for the global log-sum-exp marginalization. Shape must match template_matrix.shape[1:] flattened. Uniform prior if None.\nNone\n\n\nreference_time\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\nreference_flux\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\nreference_flux_err\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\ntheta_dict\ndict\nGP hyperparameters to use directly, bypassing the optimisation step. When provided, fit_method, fit_max_retries, and fit_kwargs are ignored. Keys must match those produced by gp_family.theta_to_dict.\nNone"
+  },
+  {
+    "objectID": "reference/gp.scan_gp_stability_map.html#parameters",
+    "href": "reference/gp.scan_gp_stability_map.html#parameters",
+    "title": "gp.scan_gp_stability_map",
+    "section": "",
+    "text": "Name\nType\nDescription\nDefault\n\n\n\n\ncontext\n'local' or 'global'\nSearch context controlling the scope of the template evaluation.\n'local'\n\n\ntemplate\nndarray, required when context=\"local\"\nSingle fixed transit template of length N (cadences).\nNone\n\n\ntemplate_matrix\nndarray, required when context=\"global\"\nPre-materialized template array of shape (N, M) or (N, M_dur, t_transit). When 3-D, z_score_tensor and log_bf_tensor of shape (S, T, M_dur, t_transit) are populated; use the profiled_z_score_map and marginalized_log_bf_map properties to reduce the duration axis.\nNone\n\n\noperational_mode\n'inference' or 'sensitivity'\nOperational mode controlling what question is answered at each grid point.\n'inference'\n\n\nz_threshold\nfloat, required when operational_mode=\"sensitivity\"\nDetection significance threshold used to derive the minimum detectable transit depth. Populates ideal_sensitivity and realization_adjusted_sensitivity on the returned map.\nNone\n\n\nsigma_a\nfloat, required when operational_mode=\"inference\"\nStandard deviation of the Gaussian amplitude prior for log Bayes factor computation.\n1\n\n\nprior\nstr\nAmplitude prior for Bayes factor computation: \"gaussian\", \"half-normal\", or \"uniform\". Only used when operational_mode=\"inference\" and context=\"global\".\n'gaussian'\n\n\namplitude_bounds\ntuple[float, float]\nRequired when prior=\"uniform\".\nNone\n\n\nlog_template_weights\nndarray\nLog-space prior weights over the template bank for the global log-sum-exp marginalization. Shape must match template_matrix.shape[1:] flattened. Uniform prior if None.\nNone\n\n\nreference_time\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\nreference_flux\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\nreference_flux_err\noptional\nWhen provided, the initial GP fit and log_marginal_likelihood grid are computed on this reference sequence rather than on time/flux. Useful when z-scores should reflect an injected signal while the posterior weights should reflect a clean baseline.\nNone\n\n\ntheta_dict\ndict\nGP hyperparameters to use directly, bypassing the optimisation step. When provided, fit_method, fit_max_retries, and fit_kwargs are ignored. Keys must match those produced by gp_family.theta_to_dict.\nNone"
+  },
+  {
+    "objectID": "reference/gp.GPStabilityMap.html",
+    "href": "reference/gp.GPStabilityMap.html",
+    "title": "gp.GPStabilityMap",
+    "section": "",
+    "text": "gp.GPStabilityMap(\n    sigma_grid,\n    timescale_grid,\n    timescale_name,\n    z_score,\n    z_white_noise,\n    recovery_fraction,\n    relative_capacity,\n    local_drop,\n    reference_gp_params,\n    log_marginal_likelihood=None,\n    reference_gp_theta_dict=None,\n    log_bf_conditional=None,\n    log_bf_global=None,\n    template_bank_size=None,\n    z_score_tensor=None,\n    log_bf_tensor=None,\n    ideal_sensitivity=None,\n    realization_adjusted_sensitivity=None,\n)\n2D scan over GP hyperparameters evaluating template significance and evidence.\nThe first axis maps out the process amplitude amplitude (sigma) and the second axis tracks the process timescale (period for SHO or scale for exponential kernels).\n\n\n\n\n\nName\nDescription\n\n\n\n\nmarginalized_log_bf_map\n(S, T, t_transit): Bayesian marginalization over duration (logsumexp over M, uniform prior).\n\n\nprofiled_z_score_map\n(S, T, t_transit): frequentist profile over the duration axis (nanmax over M).\n\n\n\n\n\n\n\n\n\nName\nDescription\n\n\n\n\nmarginalized_bayes_factor\nPosterior-weighted Bayes factor marginalised over GP hyperparameters.\n\n\nmarginalized_conditional_log_bf\nPosterior-weighted conditional Bayes factor marginalised over GP hyperparameters.\n\n\nmarginalized_log_bf_timeline\n(t_transit,): Integrated log Bayes factor timeline marginalized over\n\n\nprofiled_max_z\nZ-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters.\n\n\nprofiled_mle_metrics\nProfile all 2D grid metrics at the Maximum Likelihood Estimate (MLE).\n\n\n\n\n\ngp.GPStabilityMap.marginalized_bayes_factor(delta_log_L=np.inf)\nPosterior-weighted Bayes factor marginalised over GP hyperparameters.\nComputes\n.. math::\n\\ln B_{10}^{\\text{global}} = \\log\\sum \\exp(\\ln L_1 + \\ln A)\n- \\log\\sum \\exp(\\ln L_0 + \\ln A)\nwhere :math:\\ln L_1 = \\ln L_0 + \\ln B_{10} and :math:\\ln A are log-space Voronoi cell areas acting as the prior over the grid.\n\n\n\ngp.GPStabilityMap.marginalized_conditional_log_bf(delta_log_L=np.inf)\nPosterior-weighted conditional Bayes factor marginalised over GP hyperparameters.\nComputes\n.. math::\n\\ln B_{10}^{\\text{cond}} = \\log\\sum \\exp(\\ln L_1 + \\ln A)\n- \\log\\sum \\exp(\\ln L_0 + \\ln A)\nwhere :math:\\ln L_1 = \\ln L_0 + \\ln B_{10}^{\\text{cond}} and :math:\\ln A are log-space Voronoi cell areas acting as the prior over the grid.\n\n\n\ngp.GPStabilityMap.marginalized_log_bf_timeline(delta_log_L=16.0)\n(t_transit,): Integrated log Bayes factor timeline marginalized over all GP noise parameters and template duration variants.\n\n\n\ngp.GPStabilityMap.profiled_max_z()\nZ-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters.\nExtracts the Z-score from the grid cell where log_marginal_likelihood is maximized.\n\n\n\ngp.GPStabilityMap.profiled_mle_metrics()\nProfile all 2D grid metrics at the Maximum Likelihood Estimate (MLE).\nExtracts the scalar value of every hyperparameter grid array at the exact coordinate cell where log_marginal_likelihood is maximized."
+  },
+  {
+    "objectID": "reference/gp.GPStabilityMap.html#attributes",
+    "href": "reference/gp.GPStabilityMap.html#attributes",
+    "title": "gp.GPStabilityMap",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nmarginalized_log_bf_map\n(S, T, t_transit): Bayesian marginalization over duration (logsumexp over M, uniform prior).\n\n\nprofiled_z_score_map\n(S, T, t_transit): frequentist profile over the duration axis (nanmax over M)."
+  },
+  {
+    "objectID": "reference/gp.GPStabilityMap.html#methods",
+    "href": "reference/gp.GPStabilityMap.html#methods",
+    "title": "gp.GPStabilityMap",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nmarginalized_bayes_factor\nPosterior-weighted Bayes factor marginalised over GP hyperparameters.\n\n\nmarginalized_conditional_log_bf\nPosterior-weighted conditional Bayes factor marginalised over GP hyperparameters.\n\n\nmarginalized_log_bf_timeline\n(t_transit,): Integrated log Bayes factor timeline marginalized over\n\n\nprofiled_max_z\nZ-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters.\n\n\nprofiled_mle_metrics\nProfile all 2D grid metrics at the Maximum Likelihood Estimate (MLE).\n\n\n\n\n\ngp.GPStabilityMap.marginalized_bayes_factor(delta_log_L=np.inf)\nPosterior-weighted Bayes factor marginalised over GP hyperparameters.\nComputes\n.. math::\n\\ln B_{10}^{\\text{global}} = \\log\\sum \\exp(\\ln L_1 + \\ln A)\n- \\log\\sum \\exp(\\ln L_0 + \\ln A)\nwhere :math:\\ln L_1 = \\ln L_0 + \\ln B_{10} and :math:\\ln A are log-space Voronoi cell areas acting as the prior over the grid.\n\n\n\ngp.GPStabilityMap.marginalized_conditional_log_bf(delta_log_L=np.inf)\nPosterior-weighted conditional Bayes factor marginalised over GP hyperparameters.\nComputes\n.. math::\n\\ln B_{10}^{\\text{cond}} = \\log\\sum \\exp(\\ln L_1 + \\ln A)\n- \\log\\sum \\exp(\\ln L_0 + \\ln A)\nwhere :math:\\ln L_1 = \\ln L_0 + \\ln B_{10}^{\\text{cond}} and :math:\\ln A are log-space Voronoi cell areas acting as the prior over the grid.\n\n\n\ngp.GPStabilityMap.marginalized_log_bf_timeline(delta_log_L=16.0)\n(t_transit,): Integrated log Bayes factor timeline marginalized over all GP noise parameters and template duration variants.\n\n\n\ngp.GPStabilityMap.profiled_max_z()\nZ-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters.\nExtracts the Z-score from the grid cell where log_marginal_likelihood is maximized.\n\n\n\ngp.GPStabilityMap.profiled_mle_metrics()\nProfile all 2D grid metrics at the Maximum Likelihood Estimate (MLE).\nExtracts the scalar value of every hyperparameter grid array at the exact coordinate cell where log_marginal_likelihood is maximized."
+  },
+  {
+    "objectID": "reference/gp.MultiProfileFrequentistDetectionResult.html",
+    "href": "reference/gp.MultiProfileFrequentistDetectionResult.html",
+    "title": "gp.MultiProfileFrequentistDetectionResult",
+    "section": "",
+    "text": "gp.MultiProfileFrequentistDetectionResult(\n    time,\n    z_score,\n    template_norm,\n    z_white_noise,\n    recovery_fraction,\n    relative_capacity,\n    depth_to_threshold,\n    sensitivity,\n    detection_threshold,\n    gp_theta,\n    gp_physical_params,\n    gp_optimization_result,\n    z_score_tensor,\n    template_norm_tensor,\n)\nMatched-filter summary evaluating M nuisance-parameter profile realizations.\nz_score_tensor and template_norm_tensor carry the full (M, t_transit) tensor. z_score / template_norm hold the profile-maximized (t_transit,) summary (nanmax over M).\n\n\n\n\n\nName\nDescription\n\n\n\n\nprofiled_z_score\n(t_transit,): peak-envelope collapse over the profile axis M."
+  },
+  {
+    "objectID": "reference/gp.MultiProfileFrequentistDetectionResult.html#attributes",
+    "href": "reference/gp.MultiProfileFrequentistDetectionResult.html#attributes",
+    "title": "gp.MultiProfileFrequentistDetectionResult",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nprofiled_z_score\n(t_transit,): peak-envelope collapse over the profile axis M."
+  },
+  {
+    "objectID": "reference/gp.GPFamily.html",
+    "href": "reference/gp.GPFamily.html",
+    "title": "gp.GPFamily",
+    "section": "",
+    "text": "gp.GPFamily(name, theta_names, ranges, jitter_range=None)\n\n\n\n\n\nName\nDescription\n\n\n\n\nbuild\nBuild a GaussianProcess for this family from physical parameters.\n\n\nbuild_gp_from_theta\nConstruct a GaussianProcess for this family from theta.\n\n\nfit_light_curve\nFit this GP family to a light curve.\n\n\nparams_to_theta\nConvert physical parameters to theta space.\n\n\nplot_fit\nPlot observations and GP fit for a given theta.\n\n\ntheta_to_physical\nReturn a dict of physically meaningful parameters.\n\n\nvalidate_white_noise_baseline\nRaise if white-noise baseline diagnostics cannot be computed.\n\n\n\n\n\ngp.GPFamily.build(params, time=None, flux_err=None, mean=1.0)\nBuild a GaussianProcess for this family from physical parameters.\n\n\n\ngp.GPFamily.build_gp_from_theta(theta, light_curve)\nConstruct a GaussianProcess for this family from theta.\n\n\n\ngp.GPFamily.fit_light_curve(\n    light_curve,\n    method='differential_evolution',\n    initial_theta=None,\n    rng=None,\n    max_retries=1,\n    de_options=None,\n    minimize_options=None,\n    use_regularization=True,\n)\nFit this GP family to a light curve.\nmethod: either ‘differential_evolution’ (default; uses the validated A3_light configuration of scipy.optimize.differential_evolution) or ‘L-BFGS-B’ (uses scipy.optimize.minimize). max_retries: when &gt;1, retries the chosen optimizer with different initializations (for DE it repeats runs and picks the best solution).\nThe ‘differential_evolution’ path uses :data:A3_LIGHT_DE_OPTIONS by default (popsize=4, maxiter=100, …); pass de_options to override.\n\n\n\ngp.GPFamily.params_to_theta(**kwargs)\nConvert physical parameters to theta space.\nBy default, this just looks up the corresponding theta for each parameter name, but subclasses can override this if needed.\n\n\n\ngp.GPFamily.plot_fit(\n    theta,\n    time,\n    flux,\n    flux_err=None,\n    mean=1.0,\n    t_pred=None,\n    ax=None,\n    nsigma=2,\n    plot_data_kwargs=None,\n    plot_gp_kwargs=None,\n    shade_kwargs=None,\n    show=True,\n)\nPlot observations and GP fit for a given theta.\nParameters - theta: array-like GP parameters in the family’s theta space (e.g. result.x) - time, flux: data to plot - flux_err: optional per-point errors - mean: GP mean level used when building the GP - t_pred: times at which to evaluate the predictive mean/variance. If None a dense grid across time is used. - ax: matplotlib Axes to draw on (created if None) - nsigma: number of standard deviations to shade around the predictive mean - plot_data_kwargs: dict forwarded to the data scatter plot call - plot_gp_kwargs: dict forwarded to the predictive mean line plot call - shade_kwargs: dict forwarded to fill_between for the predictive interval - show: whether to call plt.show() before returning the axes\nReturns the matplotlib Axes instance.\n\n\n\ngp.GPFamily.theta_to_physical(theta, prefix='')\nReturn a dict of physically meaningful parameters.\n\n\n\ngp.GPFamily.validate_white_noise_baseline(flux_err)\nRaise if white-noise baseline diagnostics cannot be computed."
+  },
+  {
+    "objectID": "reference/gp.GPFamily.html#methods",
+    "href": "reference/gp.GPFamily.html#methods",
+    "title": "gp.GPFamily",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nbuild\nBuild a GaussianProcess for this family from physical parameters.\n\n\nbuild_gp_from_theta\nConstruct a GaussianProcess for this family from theta.\n\n\nfit_light_curve\nFit this GP family to a light curve.\n\n\nparams_to_theta\nConvert physical parameters to theta space.\n\n\nplot_fit\nPlot observations and GP fit for a given theta.\n\n\ntheta_to_physical\nReturn a dict of physically meaningful parameters.\n\n\nvalidate_white_noise_baseline\nRaise if white-noise baseline diagnostics cannot be computed.\n\n\n\n\n\ngp.GPFamily.build(params, time=None, flux_err=None, mean=1.0)\nBuild a GaussianProcess for this family from physical parameters.\n\n\n\ngp.GPFamily.build_gp_from_theta(theta, light_curve)\nConstruct a GaussianProcess for this family from theta.\n\n\n\ngp.GPFamily.fit_light_curve(\n    light_curve,\n    method='differential_evolution',\n    initial_theta=None,\n    rng=None,\n    max_retries=1,\n    de_options=None,\n    minimize_options=None,\n    use_regularization=True,\n)\nFit this GP family to a light curve.\nmethod: either ‘differential_evolution’ (default; uses the validated A3_light configuration of scipy.optimize.differential_evolution) or ‘L-BFGS-B’ (uses scipy.optimize.minimize). max_retries: when &gt;1, retries the chosen optimizer with different initializations (for DE it repeats runs and picks the best solution).\nThe ‘differential_evolution’ path uses :data:A3_LIGHT_DE_OPTIONS by default (popsize=4, maxiter=100, …); pass de_options to override.\n\n\n\ngp.GPFamily.params_to_theta(**kwargs)\nConvert physical parameters to theta space.\nBy default, this just looks up the corresponding theta for each parameter name, but subclasses can override this if needed.\n\n\n\ngp.GPFamily.plot_fit(\n    theta,\n    time,\n    flux,\n    flux_err=None,\n    mean=1.0,\n    t_pred=None,\n    ax=None,\n    nsigma=2,\n    plot_data_kwargs=None,\n    plot_gp_kwargs=None,\n    shade_kwargs=None,\n    show=True,\n)\nPlot observations and GP fit for a given theta.\nParameters - theta: array-like GP parameters in the family’s theta space (e.g. result.x) - time, flux: data to plot - flux_err: optional per-point errors - mean: GP mean level used when building the GP - t_pred: times at which to evaluate the predictive mean/variance. If None a dense grid across time is used. - ax: matplotlib Axes to draw on (created if None) - nsigma: number of standard deviations to shade around the predictive mean - plot_data_kwargs: dict forwarded to the data scatter plot call - plot_gp_kwargs: dict forwarded to the predictive mean line plot call - shade_kwargs: dict forwarded to fill_between for the predictive interval - show: whether to call plt.show() before returning the axes\nReturns the matplotlib Axes instance.\n\n\n\ngp.GPFamily.theta_to_physical(theta, prefix='')\nReturn a dict of physically meaningful parameters.\n\n\n\ngp.GPFamily.validate_white_noise_baseline(flux_err)\nRaise if white-noise baseline diagnostics cannot be computed."
+  },
+  {
+    "objectID": "reference/gp.SearchProfile.html",
+    "href": "reference/gp.SearchProfile.html",
+    "title": "gp.SearchProfile",
+    "section": "",
+    "text": "gp.SearchProfile(\n    epochs,\n    z_score=None,\n    template_norm=None,\n    log_bayes_factor=None,\n    log_bayes_factor_global=None,\n    log_evidence_marg=None,\n)\nA unified diagnostic container for 1D matched-filter search profiles.\nCan hold pure frequentist metrics, pure Bayesian metrics, or a joint evaluation. Properties are lazy-evaluated to prevent unnecessary memory or compute overhead.\n\n\n\n\n\nName\nDescription\n\n\n\n\nbest_fit_scale\nThe Maximum Likelihood Estimate (MLE) of the template norm profile.\n\n\nlog_likelihood_ratio\nThe log-likelihood ratio (Delta ln L) timeline profile.\n\n\n\n\n\n\n\n\n\nName\nDescription\n\n\n\n\nplot\nGenerates a perfectly synchronized layout matching your diagnostic needs.\n\n\n\n\n\ngp.SearchProfile.plot(threshold_z=3.0, threshold_ln_bf=5.0, axes=None)\nGenerates a perfectly synchronized layout matching your diagnostic needs."
+  },
+  {
+    "objectID": "reference/gp.SearchProfile.html#attributes",
+    "href": "reference/gp.SearchProfile.html#attributes",
+    "title": "gp.SearchProfile",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nbest_fit_scale\nThe Maximum Likelihood Estimate (MLE) of the template norm profile.\n\n\nlog_likelihood_ratio\nThe log-likelihood ratio (Delta ln L) timeline profile."
+  },
+  {
+    "objectID": "reference/gp.SearchProfile.html#methods",
+    "href": "reference/gp.SearchProfile.html#methods",
+    "title": "gp.SearchProfile",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nplot\nGenerates a perfectly synchronized layout matching your diagnostic needs.\n\n\n\n\n\ngp.SearchProfile.plot(threshold_z=3.0, threshold_ln_bf=5.0, axes=None)\nGenerates a perfectly synchronized layout matching your diagnostic needs."
+  },
+  {
+    "objectID": "reference/gp.evaluate_frequentist_detection.html",
+    "href": "reference/gp.evaluate_frequentist_detection.html",
+    "title": "gp.evaluate_frequentist_detection",
+    "section": "",
+    "text": "gp.evaluate_frequentist_detection(\n    time,\n    flux,\n    template_bank,\n    flux_err=None,\n    gp_family=None,\n    fit_mean=0.0,\n    fit_method='differential_evolution',\n    fit_max_retries=2,\n    fit_kwargs=None,\n    center_flux=True,\n    threshold=None,\n    robust_threshold=True,\n)\nAssess retrievability for a template bank in correlated noise.\nFits a GP to the provided light curve, computes the exact matched-filter Z-score for each template, and returns both red-noise and white-noise baseline diagnostics.\n\n\n\n\n\n\n\n\n\n\n\nName\nType\nDescription\nDefault\n\n\n\n\ntime\nnp.ndarray\nObservation times.\nrequired\n\n\nflux\nnp.ndarray\nInput flux values. When center_flux=True the median is removed before matched filtering.\nrequired\n\n\ntemplate_bank\ncallable, TemplateBank, or list[TemplateBank]\nTemplate source. If callable, evaluated at every point in time. Pass a :class:TemplateBank to use a custom epoch grid. Pass a list[TemplateBank] for multi-profile mode: each bank must share the same epoch grid; the list axis becomes the profile axis M. Returns a :class:MultiProfileFrequentistDetectionResult carrying z_score_tensor of shape (M, t_transit).\nrequired\n\n\nflux_err\nnp.ndarray\nPer-sample uncertainty.\nNone\n\n\ngp_family\nGPFamily\nGP family used for fitting. Defaults to SHOGPFamily.\nNone\n\n\nfit_mean\nfloat\nGP mean used when optimising the kernel. Does not affect matched-filter output — use center_flux to remove the photometric baseline.\n0.0\n\n\nfit_method\nstr\nOptimizer name used by GPFamily.fit_light_curve.\n'differential_evolution'\n\n\nfit_max_retries\nint\nNumber of optimizer retries.\n2\n\n\nfit_kwargs\ndict\nExtra keyword arguments forwarded to fit_light_curve.\nNone\n\n\ncenter_flux\nbool\nIf True, subtract the median from flux before filtering.\nTrue\n\n\nthreshold\nfloat\nDetectability threshold. Defaults to detection._DEFAULT_THRESHOLD.\nNone\n\n\nrobust_threshold\nbool\nIf True, scale threshold by robust noise floor estimate.\nTrue"
+  },
+  {
+    "objectID": "reference/gp.evaluate_frequentist_detection.html#parameters",
+    "href": "reference/gp.evaluate_frequentist_detection.html#parameters",
+    "title": "gp.evaluate_frequentist_detection",
+    "section": "",
+    "text": "Name\nType\nDescription\nDefault\n\n\n\n\ntime\nnp.ndarray\nObservation times.\nrequired\n\n\nflux\nnp.ndarray\nInput flux values. When center_flux=True the median is removed before matched filtering.\nrequired\n\n\ntemplate_bank\ncallable, TemplateBank, or list[TemplateBank]\nTemplate source. If callable, evaluated at every point in time. Pass a :class:TemplateBank to use a custom epoch grid. Pass a list[TemplateBank] for multi-profile mode: each bank must share the same epoch grid; the list axis becomes the profile axis M. Returns a :class:MultiProfileFrequentistDetectionResult carrying z_score_tensor of shape (M, t_transit).\nrequired\n\n\nflux_err\nnp.ndarray\nPer-sample uncertainty.\nNone\n\n\ngp_family\nGPFamily\nGP family used for fitting. Defaults to SHOGPFamily.\nNone\n\n\nfit_mean\nfloat\nGP mean used when optimising the kernel. Does not affect matched-filter output — use center_flux to remove the photometric baseline.\n0.0\n\n\nfit_method\nstr\nOptimizer name used by GPFamily.fit_light_curve.\n'differential_evolution'\n\n\nfit_max_retries\nint\nNumber of optimizer retries.\n2\n\n\nfit_kwargs\ndict\nExtra keyword arguments forwarded to fit_light_curve.\nNone\n\n\ncenter_flux\nbool\nIf True, subtract the median from flux before filtering.\nTrue\n\n\nthreshold\nfloat\nDetectability threshold. Defaults to detection._DEFAULT_THRESHOLD.\nNone\n\n\nrobust_threshold\nbool\nIf True, scale threshold by robust noise floor estimate.\nTrue"
+  },
+  {
+    "objectID": "reference/index.html",
+    "href": "reference/index.html",
+    "title": "Function reference",
+    "section": "",
+    "text": "Core data containers.\n\n\n\nLightCurve\nValidated light-curve container used by low-level GP routines.\n\n\nSimulatedLightCurve\n\n\n\n\n\n\n\nGaussian-process model families and fitting.\n\n\n\ngp.GPFamily\n\n\n\ngp.SHOGPFamily\n\n\n\ngp.ExpGPFamily\n\n\n\n\n\n\n\nTemplate banks and matched-filter statistics.\n\n\n\ngp.TemplateBank\nA callable template factory paired with its evaluation epochs.\n\n\ngp.MatchedFilter\nMatched-filter Z-score utilities for correlated-noise light curves.\n\n\ngp.SearchProfile\nA unified diagnostic container for 1D matched-filter search profiles.\n\n\n\n\n\n\nTransit recovery and detectability assessment.\n\n\n\ngp.evaluate_frequentist_detection\nAssess retrievability for a template bank in correlated noise.\n\n\ngp.evaluate_bayesian_detection\nAssess retrievability for a template bank using log Bayes factors.\n\n\ngp.FrequentistDetectionResult\nMatched-filter retrievability summary for a single parameter profile.\n\n\ngp.MultiProfileFrequentistDetectionResult\nMatched-filter summary evaluating M nuisance-parameter profile realizations.\n\n\ngp.BayesianDetectionResult\nBayes-factor retrievability summary for a single parameter profile.\n\n\ngp.MultiProfileBayesianDetectionResult\nBayesian summary evaluating M nuisance-parameter profile realizations.\n\n\ngp.TransitVettingPolicy\nUser-defined threshold bundle for transit vetting decisions.\n\n\ngp.VettingResult\n\n\n\n\n\n\n\nHyperparameter stability maps.\n\n\n\ngp.scan_gp_stability_map\nScan retrievability over a 2D GP hyperparameter grid.\n\n\ngp.GPStabilityMap\n2D scan over GP hyperparameters evaluating template significance and evidence.\n\n\n\n\n\n\n\n\n\ngp.plot_covariance_matrix",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#light-curves",
+    "href": "reference/index.html#light-curves",
+    "title": "Function reference",
+    "section": "",
+    "text": "Core data containers.\n\n\n\nLightCurve\nValidated light-curve container used by low-level GP routines.\n\n\nSimulatedLightCurve",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#gp-families",
+    "href": "reference/index.html#gp-families",
+    "title": "Function reference",
+    "section": "",
+    "text": "Gaussian-process model families and fitting.\n\n\n\ngp.GPFamily\n\n\n\ngp.SHOGPFamily\n\n\n\ngp.ExpGPFamily",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#matched-filter",
+    "href": "reference/index.html#matched-filter",
+    "title": "Function reference",
+    "section": "",
+    "text": "Template banks and matched-filter statistics.\n\n\n\ngp.TemplateBank\nA callable template factory paired with its evaluation epochs.\n\n\ngp.MatchedFilter\nMatched-filter Z-score utilities for correlated-noise light curves.\n\n\ngp.SearchProfile\nA unified diagnostic container for 1D matched-filter search profiles.",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#retrievability",
+    "href": "reference/index.html#retrievability",
+    "title": "Function reference",
+    "section": "",
+    "text": "Transit recovery and detectability assessment.\n\n\n\ngp.evaluate_frequentist_detection\nAssess retrievability for a template bank in correlated noise.\n\n\ngp.evaluate_bayesian_detection\nAssess retrievability for a template bank using log Bayes factors.\n\n\ngp.FrequentistDetectionResult\nMatched-filter retrievability summary for a single parameter profile.\n\n\ngp.MultiProfileFrequentistDetectionResult\nMatched-filter summary evaluating M nuisance-parameter profile realizations.\n\n\ngp.BayesianDetectionResult\nBayes-factor retrievability summary for a single parameter profile.\n\n\ngp.MultiProfileBayesianDetectionResult\nBayesian summary evaluating M nuisance-parameter profile realizations.\n\n\ngp.TransitVettingPolicy\nUser-defined threshold bundle for transit vetting decisions.\n\n\ngp.VettingResult",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#gp-stability",
+    "href": "reference/index.html#gp-stability",
+    "title": "Function reference",
+    "section": "",
+    "text": "Hyperparameter stability maps.\n\n\n\ngp.scan_gp_stability_map\nScan retrievability over a 2D GP hyperparameter grid.\n\n\ngp.GPStabilityMap\n2D scan over GP hyperparameters evaluating template significance and evidence.",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#visualisation",
+    "href": "reference/index.html#visualisation",
+    "title": "Function reference",
+    "section": "",
+    "text": "gp.plot_covariance_matrix",
+    "crumbs": [
+      "API Reference",
+      "All symbols"
+    ]
+  },
+  {
+    "objectID": "reference/gp.plot_covariance_matrix.html",
+    "href": "reference/gp.plot_covariance_matrix.html",
+    "title": "gp.plot_covariance_matrix",
+    "section": "",
+    "text": "gp.plot_covariance_matrix\ngp.plot_covariance_matrix(\n    gp,\n    time=None,\n    ax=None,\n    thinning=1,\n    inverse=False,\n    **kwargs,\n)"
+  },
+  {
+    "objectID": "tutorials/gp_visualisation.html",
+    "href": "tutorials/gp_visualisation.html",
+    "title": "GP noise modelling for transit detection",
+    "section": "",
+    "text": "import numpy as np\nimport matplotlib.pyplot as plt\nimport plotting as plm",
+    "crumbs": [
+      "Tutorials",
+      "GP Noise Modelling"
+    ]
+  },
+  {
+    "objectID": "tutorials/gp_visualisation.html#gp-noise-modelling-for-transit-detection",
+    "href": "tutorials/gp_visualisation.html#gp-noise-modelling-for-transit-detection",
+    "title": "GP noise modelling for transit detection",
+    "section": "GP noise modelling for transit detection",
+    "text": "GP noise modelling for transit detection\nThis notebook illustrates how the choice of GP noise model affects matched-filter transit detection. The key steps are:\n\nSimulate a light curve with a known SHO GP noise model and an injected transit\nVisualise the covariance structure of the true kernel and a misspecified exponential kernel\nCompute the matched-filter Z-score under the correct GP and verify its statistical calibration\nShow how a misspecified SHO kernel at varying periods distorts the Z-score — either by underfitting the correlated noise or by absorbing the transit signal itself\n\n\nfrom transieve import SimulatedLightCurve\nfrom transieve.bin import plot_binned_light_curve\n\n\nplanet_params = {\n    \"depth\": (3.5 / (1 * 109)) ** 2,\n    \"epoch\": 0,\n    \"duration\": 0.2,\n    \"period\": 100,\n}\ngp_params = {\n    \"log_omega\": np.log(2 * np.pi / 4),\n    \"log_sigma\": np.log(5 * 1e-4),\n    \"quality\": 1 / np.sqrt(2),\n    \"log_jitter\": np.log(1e-3),\n}\n\n\nlc = SimulatedLightCurve.from_transit(\n    **planet_params,\n    # **planet_params | {\"depth\": 0},\n    gp_params=gp_params,\n    baseline=15,\n    seed=0,\n    multiply_signal=False,\n)\ntime, flux, gp_realization, true_gp, true_signal = (\n    lc.time,\n    lc.flux,\n    lc.gp_component,\n    lc.gp_model,\n    lc.deterministic_component,\n)\n\n_, axes = plm.subplots(3, 1, sharex=True, rescale_height=0.4)\n_ = lc.plot(axes)\n\nplot_binned_light_curve(\n    time, gp_realization, bin_time=3 / 24, method=\"median\", ax=axes[0], color=\"black\"\n)\nplot_binned_light_curve(\n    time, flux, bin_time=2 / 24, method=\"median\", ax=axes[2], color=\"black\"\n)",
+    "crumbs": [
+      "Tutorials",
+      "GP Noise Modelling"
+    ]
+  },
+  {
+    "objectID": "tutorials/gp_visualisation.html#covariance-structure",
+    "href": "tutorials/gp_visualisation.html#covariance-structure",
+    "title": "GP noise modelling for transit detection",
+    "section": "Covariance structure",
+    "text": "Covariance structure\nThe matched-filter Z-score is fundamentally governed by the inverse covariance matrix, \\(C^{-1}\\). While \\(C\\) describes how noise points “cling” together, \\(C^{-1}\\) encodes the instructions for pulling them apart. In the white-noise limit, \\(C\\) and \\(C^{-1}\\) are simply diagonal; however, for correlated stellar noise, \\(C^{-1}\\) acts as a whitening filter that suppresses (de-weights) residuals matching the expected noise correlation scales.\nBelow we compare \\(C\\) and \\(C^{-1}\\) for:\n\nthe true SHO kernel — a stochastically-driven harmonic oscillator with \\(Q = 1/\\sqrt{2}\\) (the critically-damped limit, which produces smooth, non-oscillatory covariance decay), and\na misspecified exponential kernel — a simpler single-timescale model that cannot capture the smooth rolloff of the true covariance.\n\nThe exponential kernel is a common default choice and serves as a useful foil: it is wrong in a structured way that is easy to diagnose visually.\nDeep Dive: For a more interactive look at how kernels translate to function space, see the Visual exploration of Gaussian processes.\n\nfrom celerite2 import GaussianProcess, terms\n\nfrom transieve.gp import plot_covariance_matrix\n\nexp_gp = GaussianProcess(\n    kernel=terms.RealTerm(\n        a=2.0,\n        c=0.1,\n    ),\n    t=time,\n    diag=(np.exp(2 * gp_params[\"log_jitter\"])),\n    mean=1.0,\n)\n\nfig, axes = plm.subplots(nrows=2, ncols=2)\n\nplot_covariance_matrix(true_gp, ax=axes[0, 0], thinning=1)\nplot_covariance_matrix(exp_gp, ax=axes[0, 1], thinning=1)\nplot_covariance_matrix(true_gp, ax=axes[1, 0], thinning=1, inverse=True)\nplot_covariance_matrix(exp_gp, ax=axes[1, 1], thinning=1, inverse=True)\n\nfor ax in axes.flatten():\n    ax.spines[\"top\"].set_visible(True)\n    ax.spines[\"right\"].set_visible(True)\n\n# Add titles for each column\naxes[0, 0].set_title(\"SHO kernel\")\naxes[0, 1].set_title(\"Exponential kernel\")\n\nplt.tight_layout()",
+    "crumbs": [
+      "Tutorials",
+      "GP Noise Modelling"
+    ]
+  },
+  {
+    "objectID": "tutorials/gp_visualisation.html#matched-filter-z-score",
+    "href": "tutorials/gp_visualisation.html#matched-filter-z-score",
+    "title": "GP noise modelling for transit detection",
+    "section": "Matched filter Z-score",
+    "text": "Matched filter Z-score\nUnder the correct GP, the Z-score time series should peak at the true transit epoch and be distributed as \\(\\mathcal{N}(0,1)\\) everywhere else (null hypothesis). We verify both properties below.\nGetting this calibration right is not cosmetic: if the off-transit Z-scores are inflated, every threshold crossing becomes a false alarm; if they are suppressed, real transits are missed. The plots and histogram below confirm that the SHO kernel with the true parameters produces a well-calibrated filter.\nThe Wald test statistic (also called the matched filter signal-to-noise ratio) is:\n\\[\nZ = \\frac{y^T C^{-1} s}{\\sqrt{s^T C^{-1} s}}\n\\]\nIn the white-noise case \\(C\\) is diagonal:\n\\[\nC =\n\\begin{bmatrix}\n  \\sigma_{t_1}^{2} & & \\\\\n  & \\ddots & \\\\\n  & & \\sigma_{t_n}^{2}\n\\end{bmatrix}\n\\]\nand the Z-score reduces to the familiar sum \\(\\sum_i y_i s_i / \\sigma_i^2\\). For correlated noise, using the correct \\(C^{-1}\\) from the GP is essential to avoid inflated or suppressed Z-scores.\nIn the code, the denominator \\(\\sqrt{s^T C^{-1} s}\\) is the template norm returned by MatchedFilter.template_norm_and_projection. It sets the scale against which the projection \\(y^T C^{-1} s\\) is measured, so that a Z-score of 1 always means a one-sigma detection regardless of the template’s amplitude or the noise level.\n\n\n\n\n\n\nNoteMathematical interpretation of the GP as a function-space metric\n\n\n\n\n\nWhile we treat \\(C\\) simply as a covariance matrix, it is formally the “reproducing kernel” for a Reproducing Kernel Hilbert Space (RKHS), \\(\\mathcal{H}\\). This provides a deeper geometric interpretation of what happens during transit detection.\n\nWhat is the RKHS Norm?\nEvery kernel \\(k(t, t')\\) defines a unique space of functions. In this space, the “complexity” or “roughness” of a function \\(f\\) is measured by its RKHS norm, \\(\\|f\\|_{\\mathcal{H}}^2 = \\int f(t) k^{-1}(t, t') f(t') dt dt' \\approx \\sum_{i,j} f(t_i) [C^{-1}]_{ij} f(t_j) = y^T C^{-1} y\\).\nFor a Gaussian Process, the log-likelihood (ignoring normalization constants) is: \\(\\ln p(\\mathbf{y} \\mid \\theta) = \\underbrace{-\\frac{1}{2} \\mathbf{y}^T C_\\theta^{-1} \\mathbf{y}}_{\\text{Data Fit}} \\underbrace{-\\frac{1}{2} \\ln |C_\\theta|}_{\\text{Complexity Penalty}} - \\frac{n}{2} \\ln(2\\pi)\\)\nMathematically, the inverse covariance \\(C^{-1}\\) acts as the metric tensor for this space.\n\n\nIn the context of transit detection\nWhen we fit a GP to a light curve containing a transit, we are essentially performing a decomposition based on these norms:\n\nStellar Noise: A good noise model (like the SHO kernel) has a low RKHS norm for smooth, oscillatory stellar variations. The GP “prefers” these shapes.\nThe Transit: A transit signal \\(s(t)\\) usually has a high RKHS norm relative to the SHO kernel because its sharp ingress/egress “strains” the smooth expectations of the GP.\n\n\nThe Risk of Misspecification: If your kernel is too flexible (e.g., a very short timescale), the transit’s RKHS norm becomes small. The GP then “sees” the transit as a low-energy noise fluctuation and absorbs it, effectively “whitening away” the planet you are trying to find.\n\n\n\n\n\n\nfrom transieve.gp import MatchedFilter\nimport transieve.transit as transit\n\nmonotransit_generator = transit.get_monotransit_from_epoch(\n    **planet_params, time=time, mean=0\n)\n\nmatched_filter = MatchedFilter(true_gp, flux=flux - 1)\nmf_statistics = matched_filter.get_search_profile(monotransit_generator)\n\n\nfig, axes = plm.subplots(2, 1, sharex=True, rescale_height=0.5)\nmf_statistics.plot(axes=axes)\n\n# axes[2].axhline(0, color=\"black\", linestyle=\"--\")\n\n(&lt;Figure size 2007.87x1240.93 with 2 Axes&gt;,\n [&lt;Axes: ylabel='$\\\\ln B_{10}$'&gt;,\n  &lt;Axes: xlabel='Transit search epoch time ($t_0$)', ylabel='Matched Filter Z-score'&gt;])\n\n\n\n\n\n\n\n\n\n\nwhitened_signal = matched_filter.whiten(true_signal - 1)\nwhitened_flux = matched_filter.whiten(flux - 1)\n\n\n\nShow plotting code\nfig, axes = plm.subplots(nrows=3, sharex=True, rescale_height=0.5)\nax = axes[0]\nax.plot(time, flux, marker=\".\", ls=\"\", c=\"C0\", mec=\"None\", label=\"Flux\")\nax.plot(\n    time, true_signal - 0.0015, label=\"Transit signal\", c=\"black\", lw=1\n)  # offset for visibility\nax.legend(\n    bbox_to_anchor=(1 / 2, 1.0),\n    loc=\"lower center\",\n    ncol=3,\n    frameon=False,\n    columnspacing=3.0,\n)\nax.set_ylabel(\"Relative flux\")\n\nax = axes[1]\nax.plot(\n    time, whitened_flux, label=\"Whitened flux\", marker=\".\", ls=\"\", c=\"C0\", mec=\"None\"\n)\nax.plot(\n    time, whitened_signal - 5, label=\"Whitened signal\", c=\"black\"\n)  # offset for visibility\nax.set_ylabel(\"Whitened flux\")\n\nax = axes[2]\nax.plot(time, mf_statistics.z_score)\nax.set_xlabel(\"Time [days]\")\n_ = ax.set_ylabel(\"Z-score\")\n\n\n\n\n\n\n\n\n\n\nfrom scipy.stats import norm\n\nfig, ax = plm.subplots(1, 1, rescale_height=0.7)\nax.hist(mf_statistics.z_score, bins=30, density=True)\npdf_x = np.linspace(-5, 5, 100)\npdf = norm.pdf(pdf_x, loc=0, scale=1)\nax.plot(pdf_x, pdf)\nax.set_xlabel(\"Z-score\")\nax.set_ylabel(\"Density\")\n\nText(0, 0.5, 'Density')\n\n\n\n\n\n\n\n\n\nThe histogram confirms that off-transit Z-scores follow \\(\\mathcal{N}(0,1)\\) closely. This means the filter is neither over- nor under-confident: a threshold of \\(Z &gt; 5\\) carries its nominal false-alarm probability, and detections can be compared directly across different light curves or noise realisations.",
+    "crumbs": [
+      "Tutorials",
+      "GP Noise Modelling"
+    ]
+  },
+  {
+    "objectID": "tutorials/quickstart.html",
+    "href": "tutorials/quickstart.html",
+    "title": "transieve",
+    "section": "",
+    "text": "This page walks through a minimal end-to-end run of the transieve pipeline: simulate a light curve with an injected transit, build a template bank, fit a GP noise model, and assess how well the transit can be recovered.\nimport matplotlib.pyplot as plt\nfrom transieve import SimulatedLightCurve\nfrom transieve.gp import SHOGPFamily, evaluate_frequentist_detection\nfrom transieve.transit import get_monotransit_from_epoch",
+    "crumbs": [
+      "Getting Started",
+      "Quickstart"
+    ]
+  },
+  {
+    "objectID": "tutorials/quickstart.html#simulate-a-light-curve",
+    "href": "tutorials/quickstart.html#simulate-a-light-curve",
+    "title": "transieve",
+    "section": "Simulate a light curve",
+    "text": "Simulate a light curve\nSimulatedLightCurve.from_transit draws a realisation of SHO GP noise and multiplies it by (or adds) a deterministic transit model. Setting multiply_signal=False uses additive composition, which keeps the signal zero-centred — the preferred mode for matched filtering.\n\nlc = SimulatedLightCurve.from_transit(\n    epoch=0.0,\n    depth=0.002,\n    duration=0.2,\n    period=100.0,\n    baseline=15,\n    cadence=10,\n    multiply_signal=False,\n    seed=42,\n)\n_ = lc.plot()",
+    "crumbs": [
+      "Getting Started",
+      "Quickstart"
+    ]
+  },
+  {
+    "objectID": "tutorials/quickstart.html#build-a-template-bank",
+    "href": "tutorials/quickstart.html#build-a-template-bank",
+    "title": "transieve",
+    "section": "Build a template bank",
+    "text": "Build a template bank\nget_monotransit_from_epoch returns a callable f(epoch) -&gt; flux array that evaluates the empirical transit model centred at any requested epoch. Passing it directly to evaluate_frequentist_detection causes the filter to slide the template across every cadence in lc.time.\n\ntemplate_bank = get_monotransit_from_epoch(\n    lc.time,\n    depth=0.002,\n    duration=0.2,\n    mean=0.0,\n)",
+    "crumbs": [
+      "Getting Started",
+      "Quickstart"
+    ]
+  },
+  {
+    "objectID": "tutorials/quickstart.html#fit-a-gp-and-run-the-matched-filter",
+    "href": "tutorials/quickstart.html#fit-a-gp-and-run-the-matched-filter",
+    "title": "transieve",
+    "section": "Fit a GP and run the matched filter",
+    "text": "Fit a GP and run the matched filter\nevaluate_frequentist_detection fits the chosen GP family to the light curve, then computes the exact GP-inverse matched-filter Z-score at each epoch. SHOGPFamily(jitter_range=...) adds a white-noise jitter term to the fit, which is required when no per-cadence flux_err is provided.\n\nresult = evaluate_frequentist_detection(\n    time=lc.time,\n    flux=lc.flux,\n    template_bank=template_bank,\n    gp_family=SHOGPFamily(jitter_range=(1e-4, 1e-2)),\n    center_flux=True,\n)",
+    "crumbs": [
+      "Getting Started",
+      "Quickstart"
+    ]
+  },
+  {
+    "objectID": "tutorials/quickstart.html#inspect-the-results",
+    "href": "tutorials/quickstart.html#inspect-the-results",
+    "title": "transieve",
+    "section": "Inspect the results",
+    "text": "Inspect the results\nz_score is the matched-filter detection statistic at each candidate epoch. A peak near the injected epoch (0.0 d) indicates a successful recovery. recovery_fraction measures how much of the transit signal survives the GP noise model relative to a white-noise baseline.\n\nfig, ax = plt.subplots()\nax.plot(result.time, result.z_score, lw=1)\nax.axvline(0.0, ls=\"--\", label=\"injected epoch\")\nax.set_ylabel(\"Z-score\")\nax.set_xlabel(\"Time [days]\")\nax.legend()\n\n\n\n\n\n\n\n\n\nidx, z_peak = result.strongest_match()\nprint(f\"Peak Z-score:              {z_peak:.2f}\")\nprint(f\"Epoch at peak:             {result.time[idx]:.3f} days\")\nprint(f\"Recovery fraction at peak: {result.peak_recovery_fraction:.2f}\")\n\nPeak Z-score:              0.74\nEpoch at peak:             -0.010 days\nRecovery fraction at peak: 0.72",
+    "crumbs": [
+      "Getting Started",
+      "Quickstart"
+    ]
+  }
+]
