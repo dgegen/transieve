@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/dgegen/transieve/actions/workflows/ci.yml/badge.svg)](https://github.com/dgegen/transieve/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-dgegen.github.io%2Ftransieve-blue)](https://dgegen.github.io/transieve/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21134333.svg)](https://doi.org/10.5281/zenodo.21134333)
 
 Quantifying single-transit detectability in light curves.
 

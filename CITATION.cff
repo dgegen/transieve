@@ -2,6 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata from this file."
 title: "transieve: Transit-signal analysis in correlated noise"
 version: 0.1.0
+doi: 10.5281/zenodo.21134333
 license: MIT
 repository-code: "https://github.com/dgegen/transieve"
 abstract: >
