@@ -149,6 +149,7 @@ class MatchedFilter:
     def get_search_profile(
         self, bank: Callable[[float], np.ndarray] | TemplateBank
     ) -> SearchProfile:
+        bank = TemplateBank._coerce(bank, default_epochs=self.gp._t)
         z_stats = self.z_score_map(bank)
         bf_map = self.log_bayes_factor_map(bank, sigma_a=1.0, prior="half-normal")
         return SearchProfile(
@@ -679,6 +680,13 @@ class SearchProfile:
         n_rows = int(has_bf) + int(has_z)
         if axes is None:
             fig, axes = plt.subplots(n_rows, 1, figsize=(10, 3.5 * n_rows), sharex=True)
+        else:
+            if hasattr(axes, "figure"):
+                fig = axes.figure
+            elif isinstance(axes, (list, np.ndarray)) and len(axes) > 0 and hasattr(axes[0], "figure"):
+                fig = axes[0].figure
+            else:
+                fig = plt.gcf()
         ax_list = [axes] if n_rows == 1 else list(axes)
 
         curr_ax = 0

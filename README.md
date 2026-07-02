@@ -17,7 +17,7 @@ uv sync
 ```python
 import numpy as np
 from transieve import SimulatedLightCurve
-from transieve.gp import SHOGPFamily, assess_retrievability
+from transieve.gp import SHOGPFamily, evaluate_frequentist_detection
 from transieve.transit import get_monotransit_from_epoch
 
 lc = SimulatedLightCurve.from_transit(
@@ -25,7 +25,7 @@ lc = SimulatedLightCurve.from_transit(
     baseline=15, cadence=10, multiply_signal=False, seed=42,
 )
 
-result = assess_retrievability(
+result = evaluate_frequentist_detection(
     time=lc.time,
     flux=lc.flux,
     template_bank=get_monotransit_from_epoch(lc.time, depth=0.002, duration=0.2),

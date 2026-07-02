@@ -78,14 +78,19 @@ quartodoc:
       contents:
         - gp.TemplateBank
         - gp.MatchedFilter
-        - gp.MatchedFilterStatistics
+        - gp.SearchProfile
 
     - title: "Retrievability"
       desc: "Transit recovery and detectability assessment."
       contents:
-        - gp.assess_retrievability
-        - gp.check_retrievability
-        - gp.RetrievabilityResult
+        - gp.evaluate_frequentist_detection
+        - gp.evaluate_bayesian_detection
+        - gp.FrequentistDetectionResult
+        - gp.MultiProfileFrequentistDetectionResult
+        - gp.BayesianDetectionResult
+        - gp.MultiProfileBayesianDetectionResult
+        - gp.TransitVettingPolicy
+        - gp.VettingResult
 
     - title: "GP Stability"
       desc: "Hyperparameter stability maps."

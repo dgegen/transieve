@@ -11,7 +11,7 @@
 # %%
 import matplotlib.pyplot as plt
 from transieve import SimulatedLightCurve
-from transieve.gp import SHOGPFamily, assess_retrievability
+from transieve.gp import SHOGPFamily, evaluate_frequentist_detection
 from transieve.transit import get_monotransit_from_epoch
 
 # %%
@@ -45,7 +45,7 @@ _ = lc.plot()
 #
 # `get_monotransit_from_epoch` returns a callable `f(epoch) -> flux array`
 # that evaluates the empirical transit model centred at any requested epoch.
-# Passing it directly to `assess_retrievability` causes the filter to slide
+# Passing it directly to `evaluate_frequentist_detection` causes the filter to slide
 # the template across every cadence in `lc.time`.
 
 # %%
@@ -59,13 +59,13 @@ template_bank = get_monotransit_from_epoch(
 # %% [markdown]
 # ## Fit a GP and run the matched filter
 #
-# `assess_retrievability` fits the chosen GP family to the light curve,
+# `evaluate_frequentist_detection` fits the chosen GP family to the light curve,
 # then computes the exact GP-inverse matched-filter Z-score at each epoch.
 # `SHOGPFamily(jitter_range=...)` adds a white-noise jitter term to the fit,
 # which is required when no per-cadence `flux_err` is provided.
 
 # %%
-result = assess_retrievability(
+result = evaluate_frequentist_detection(
     time=lc.time,
     flux=lc.flux,
     template_bank=template_bank,

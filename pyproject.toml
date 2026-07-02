@@ -3,6 +3,11 @@ build-backend = "uv_build"
 requires = ["uv_build>=0.9.5,<0.10.0"]
 
 [dependency-groups]
+all = [
+  {include-group = "docs"},
+  {include-group = "zarr"},
+  "pandas>=3.0.0"
+]
 dev = [
   {include-group = "test"},
   "pre-commit>=4.5.1",
@@ -14,7 +19,7 @@ docs = [
   "griffe<2.0",
   "plotm",
   "nbformat>=5.10.4",
-  "notebook>=7.5.6",
+  "notebook>=7.5.6"
 ]
 test = [
   "pytest>=9.0.2"
@@ -22,11 +27,6 @@ test = [
 zarr = [
   "xarray>=2026.1.0",
   "zarr>=3.1.5"
-]
-all = [
-  {include-group = "docs"},
-  {include-group = "zarr"},
-  "pandas>=3.0.0",
 ]
 
 [project]
@@ -41,7 +41,7 @@ dependencies = [
   "matplotlib>=3.10.7",
   "numpy>=2.3.5",
   "pywavelets>=1.9.0",
-  "scipy>=1.16.3",
+  "scipy>=1.16.3"
 ]
 description = "Transit-signal analysis in correlated noise."
 name = "transieve"
@@ -57,4 +57,4 @@ Repository = "https://github.com/dgegen/transieve"
 "docs/**/*.py" = ["E402"]
 
 [tool.uv.sources]
-plotm = { git = "https://github.com/dgegen/plotm" }
+plotm = {git = "https://github.com/dgegen/plotm"}
