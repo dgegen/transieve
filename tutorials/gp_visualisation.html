@@ -450,7 +450,7 @@ window.Quarto = {
 </header>
 
 
-<div id="dd7e3466" class="cell" data-execution_count="1">
+<div id="4e96dd16" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> plotting <span class="im">as</span> plm</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -464,7 +464,7 @@ window.Quarto = {
 <li><strong>Compute</strong> the matched-filter Z-score under the correct GP and verify its statistical calibration</li>
 <li><strong>Show</strong> how a misspecified SHO kernel at varying periods distorts the Z-score — either by underfitting the correlated noise or by absorbing the transit signal itself</li>
 </ol>
-<div id="895dd5fd" class="cell" data-execution_count="2">
+<div id="28382bff" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve <span class="im">import</span> SimulatedLightCurve</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve.<span class="bu">bin</span> <span class="im">import</span> plot_binned_light_curve</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -527,7 +527,7 @@ window.Quarto = {
 </ul>
 <p>The exponential kernel is a common default choice and serves as a useful foil: it is <em>wrong in a structured way</em> that is easy to diagnose visually.</p>
 <p>Deep Dive: For a more interactive look at how kernels translate to function space, see the <a href="https://distill.pub/2019/visual-exploration-gaussian-processes/">Visual exploration of Gaussian processes</a>.</p>
-<div id="5e050af9" class="cell" data-execution_count="3">
+<div id="db635d0d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> celerite2 <span class="im">import</span> GaussianProcess, terms</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve.gp <span class="im">import</span> plot_covariance_matrix</span>
@@ -619,7 +619,7 @@ C =
 </div>
 </div>
 </div>
-<div id="395a8ddc" class="cell" data-execution_count="4">
+<div id="d7fa235f" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve.gp <span class="im">import</span> MatchedFilter</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> transieve.transit <span class="im">as</span> transit</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -630,7 +630,7 @@ C =
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>matched_filter <span class="op">=</span> MatchedFilter(true_gp, flux<span class="op">=</span>flux <span class="op">-</span> <span class="dv">1</span>)</span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>mf_statistics <span class="op">=</span> matched_filter.get_search_profile(monotransit_generator)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="93125759" class="cell" data-execution_count="5">
+<div id="0772b043" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plm.subplots(<span class="dv">2</span>, <span class="dv">1</span>, sharex<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>mf_statistics.plot(axes<span class="op">=</span>axes)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -648,11 +648,11 @@ C =
 </div>
 </div>
 </div>
-<div id="119d43e6" class="cell" data-execution_count="6">
+<div id="bfe9b301" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>whitened_signal <span class="op">=</span> matched_filter.whiten(true_signal <span class="op">-</span> <span class="dv">1</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>whitened_flux <span class="op">=</span> matched_filter.whiten(flux <span class="op">-</span> <span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="67fd2ae8" class="cell" data-execution_count="7">
+<div id="60423bc6" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Show plotting code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plm.subplots(nrows<span class="op">=</span><span class="dv">3</span>, sharex<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">0.5</span>)</span>
@@ -692,7 +692,7 @@ C =
 </div>
 </div>
 </div>
-<div id="6e054a64" class="cell" data-execution_count="8">
+<div id="d4bd5a74" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.stats <span class="im">import</span> norm</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plm.subplots(<span class="dv">1</span>, <span class="dv">1</span>, rescale_height<span class="op">=</span><span class="fl">0.7</span>)</span>

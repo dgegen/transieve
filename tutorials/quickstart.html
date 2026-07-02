@@ -407,7 +407,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 
 <p>This page walks through a minimal end-to-end run of the <code>transieve</code> pipeline: simulate a light curve with an injected transit, build a template bank, fit a GP noise model, and assess how well the transit can be recovered.</p>
-<div id="f05f1b57" class="cell" data-execution_count="1">
+<div id="1db76b6c" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve <span class="im">import</span> SimulatedLightCurve</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transieve.gp <span class="im">import</span> SHOGPFamily, evaluate_frequentist_detection</span>
@@ -416,7 +416,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="simulate-a-light-curve" class="level2">
 <h2 class="anchored" data-anchor-id="simulate-a-light-curve">Simulate a light curve</h2>
 <p><code>SimulatedLightCurve.from_transit</code> draws a realisation of SHO GP noise and multiplies it by (or adds) a deterministic transit model. Setting <code>multiply_signal=False</code> uses additive composition, which keeps the signal zero-centred — the preferred mode for matched filtering.</p>
-<div id="b0605789" class="cell" data-execution_count="3">
+<div id="3e03a1c1" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>lc <span class="op">=</span> SimulatedLightCurve.from_transit(</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    epoch<span class="op">=</span><span class="fl">0.0</span>,</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    depth<span class="op">=</span><span class="fl">0.002</span>,</span>
@@ -440,7 +440,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="build-a-template-bank" class="level2">
 <h2 class="anchored" data-anchor-id="build-a-template-bank">Build a template bank</h2>
 <p><code>get_monotransit_from_epoch</code> returns a callable <code>f(epoch) -&gt; flux array</code> that evaluates the empirical transit model centred at any requested epoch. Passing it directly to <code>evaluate_frequentist_detection</code> causes the filter to slide the template across every cadence in <code>lc.time</code>.</p>
-<div id="08a15845" class="cell" data-execution_count="4">
+<div id="4b8388eb" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>template_bank <span class="op">=</span> get_monotransit_from_epoch(</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    lc.time,</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    depth<span class="op">=</span><span class="fl">0.002</span>,</span>
@@ -452,7 +452,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="fit-a-gp-and-run-the-matched-filter" class="level2">
 <h2 class="anchored" data-anchor-id="fit-a-gp-and-run-the-matched-filter">Fit a GP and run the matched filter</h2>
 <p><code>evaluate_frequentist_detection</code> fits the chosen GP family to the light curve, then computes the exact GP-inverse matched-filter Z-score at each epoch. <code>SHOGPFamily(jitter_range=...)</code> adds a white-noise jitter term to the fit, which is required when no per-cadence <code>flux_err</code> is provided.</p>
-<div id="f538efea" class="cell" data-execution_count="5">
+<div id="c1ba9496" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> evaluate_frequentist_detection(</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    time<span class="op">=</span>lc.time,</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    flux<span class="op">=</span>lc.flux,</span>
@@ -465,7 +465,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="inspect-the-results" class="level2">
 <h2 class="anchored" data-anchor-id="inspect-the-results">Inspect the results</h2>
 <p><code>z_score</code> is the matched-filter detection statistic at each candidate epoch. A peak near the injected epoch (0.0 d) indicates a successful recovery. <code>recovery_fraction</code> measures how much of the transit signal survives the GP noise model relative to a white-noise baseline.</p>
-<div id="504e54c3" class="cell" data-execution_count="6">
+<div id="85e8dc15" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ax.plot(result.time, result.z_score, lw<span class="op">=</span><span class="dv">1</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>ax.axvline(<span class="fl">0.0</span>, ls<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="st">"injected epoch"</span>)</span>
@@ -480,7 +480,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<div id="f80e83d0" class="cell" data-execution_count="7">
+<div id="d693d4db" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>idx, z_peak <span class="op">=</span> result.strongest_match()</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Peak Z-score:              </span><span class="sc">{</span>z_peak<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Epoch at peak:             </span><span class="sc">{</span>result<span class="sc">.</span>time[idx]<span class="sc">:.3f}</span><span class="ss"> days"</span>)</span>
