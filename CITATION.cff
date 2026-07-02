@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "transieve: Transit-signal analysis in correlated noise"
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/dgegen/transieve"
+abstract: >
+  transieve is a Python library for quantifying how detectable a single-transit
+  is in a stellar light curve. It combines empirical and limb-darkened transit
+  models with Gaussian-process noise modelling to compute GP-whitened
+  matched-filter Z-scores as an algorithmic proxy for detectability.
+keywords:
+  - exoplanets
+  - transit photometry
+  - gaussian processes
+  - astronomy
+  - TESS
+authors:
+  - given-names: David
+    family-names: Degen
+    email: ddegen@ethz.ch
+    orcid: "https://orcid.org/0009-0008-1068-481X"
