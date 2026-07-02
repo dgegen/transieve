@@ -9,6 +9,8 @@ Transit-signal analysis in correlated noise.
 
 We built `transieve` to find the "edge of detectability" for long-period, single-transit exoplanets in TESS data: the regime that's too rare for humans to vet at scale, but exactly where machine-learning search pipelines need well-targeted training examples. By injecting synthetic transits into real TESS light curves and comparing the resulting Z-scores against a human-consensus baseline from a citizen-science-style validation study (in the spirit of [Planet Hunters TESS](https://www.zooniverse.org/projects/nora-dot-eisner/planet-hunters-tess)), we showed that a contrast-adjusted, sector-rigid Z-score closely tracks human detectability (AUROC ≈ 0.98). That gives a scalable formula — $P(D_H=1 \mid Z_\text{contrast})$ — for curating ML training curricula: injecting transits right at the ambiguous $P=0.5$ boundary instead of at random depths, and mining high-Z, no-signal light curves as hard negatives against instrumental false alarms.
 
+Documentation, including the API reference and tutorials, is available at [dgegen.github.io/transieve](https://dgegen.github.io/transieve/).
+
 ## Installation
 
 ```bash
