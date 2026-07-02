@@ -3,7 +3,7 @@
 [![CI](https://github.com/dgegen/transieve/actions/workflows/ci.yml/badge.svg)](https://github.com/dgegen/transieve/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-dgegen.github.io%2Ftransieve-blue)](https://dgegen.github.io/transieve/)
 
-Transit-signal analysis in correlated noise.
+Quantifying single-transit detectability in light curves.
 
 `transieve` is a research package for quantifying how detectable a single-transit is in a stellar light curve. It combines empirical and limb-darkened transit models with Gaussian-process noise modelling (`celerite2`) to compute GP-whitened matched-filter Z-scores — an algorithmic proxy for detectability.
 
