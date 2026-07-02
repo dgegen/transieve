@@ -431,7 +431,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><code>scan_gp_stability_map</code>: map the Z-score and marginal likelihood across different GP hyperparameters.</li>
 </ul>
 <p>The Z-score evaluated at the Maximum Likelihood Estimate (MLE) of the GP hyperparameters typically provides the most reliable detection metric.</p>
-<div id="525751ef" class="cell" data-execution_count="1">
+<div id="a601be17" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time <span class="im">as</span> python_time</span>
@@ -450,7 +450,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="build-a-synthetic-light-curve" class="level2">
 <h2 class="anchored" data-anchor-id="build-a-synthetic-light-curve">Build a synthetic light curve</h2>
 <p>We generate a light curve with an injected monotransit and correlated stellar noise (modelled as a Simple Harmonic Oscillator GP).</p>
-<div id="25729ed9" class="cell" data-execution_count="2">
+<div id="8cd0a184" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>planet_params <span class="op">=</span> {</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"depth"</span>: (<span class="dv">3</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">*</span> <span class="dv">109</span>)) <span class="op">**</span> <span class="dv">2</span>,</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"epoch"</span>: <span class="fl">0.0</span>,</span>
@@ -477,7 +477,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>time, flux <span class="op">=</span> lc.time, lc.flux</span>
 <span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>true_signal <span class="op">=</span> lc.deterministic_component</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="0d342a1a" class="cell" data-execution_count="3">
+<div id="4be7599b" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>_, axes <span class="op">=</span> plm.subplots(<span class="dv">3</span>, <span class="dv">1</span>, sharex<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">0.4</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>_ <span class="op">=</span> lc.plot(axes)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
@@ -492,7 +492,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="baseline-retrievability-with-fitted-gp" class="level2">
 <h2 class="anchored" data-anchor-id="baseline-retrievability-with-fitted-gp">Baseline retrievability with fitted GP</h2>
 <p>We fit an SHO GP to the light curve (finding the MLE hyperparameters) and evaluate the matched filter over a bank of transit epochs. This provides our primary detection metric: the Z-score timeline.</p>
-<div id="be461701" class="cell" data-execution_count="4">
+<div id="ca49e467" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>gp_family <span class="op">=</span> SHOGPFamily(jitter_range<span class="op">=</span>(<span class="fl">1e-6</span>, <span class="fl">1e-2</span>))</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>template_generator <span class="op">=</span> get_monotransit_from_epoch(</span>
@@ -525,7 +525,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 Recovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.float64(0.0007235818446203121), 'quality': np.float64(0.5000040923318889), 'jitter': np.float64(0.0009794266263686814)}</code></pre>
 </div>
 </div>
-<div id="8cea439e" class="cell" data-execution_count="5">
+<div id="590f313b" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plm.subplots(<span class="dv">2</span>, <span class="dv">1</span>, sharex<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">0.6</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot flux with highlighted transit</span></span>
@@ -550,7 +550,7 @@ Recovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.f
 <span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">"Z-score"</span>)</span>
 <span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].axhline(<span class="dv">0</span>, color<span class="op">=</span><span class="st">"gray"</span>, ls<span class="op">=</span><span class="st">"-"</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, lw<span class="op">=</span><span class="fl">0.8</span>)</span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].axhline(<span class="dv">5</span>, color<span class="op">=</span><span class="st">"red"</span>, lw<span class="op">=</span><span class="fl">1.2</span>, ls<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="vs">r"5</span><span class="dv">$\s</span><span class="vs">igma</span><span class="dv">$</span><span class="vs"> Threshold"</span>)</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].axhline(<span class="dv">4</span>, color<span class="op">=</span><span class="st">"red"</span>, lw<span class="op">=</span><span class="fl">1.2</span>, ls<span class="op">=</span><span class="st">"--"</span>, label<span class="op">=</span><span class="vs">r"4</span><span class="dv">$\s</span><span class="vs">igma</span><span class="dv">$</span><span class="vs"> Threshold"</span>)</span>
 <span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_xlabel(<span class="st">"Template epoch [days]"</span>)</span>
 <span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].legend(loc<span class="op">=</span><span class="st">"upper right"</span>)</span>
 <span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a></span>
@@ -571,7 +571,7 @@ Recovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.f
 <li><strong>Too flexible</strong> (e.g.&nbsp;short period): The GP might overfit and absorb the transit itself.</li>
 <li><strong>Too rigid</strong> (e.g.&nbsp;long period): The GP underfits stellar variability, inflating the noise floor.</li>
 </ul>
-<div id="529c49ed" class="cell" data-execution_count="6">
+<div id="1ac68ad4" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sigma_grid <span class="op">=</span> np.geomspace(<span class="fl">2e-4</span>, <span class="fl">3e-3</span>, <span class="dv">20</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>period_grid <span class="op">=</span> np.geomspace(<span class="fl">0.2</span>, <span class="fl">40.0</span>, <span class="dv">24</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -593,14 +593,14 @@ Recovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.f
 <span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>toc <span class="op">=</span> python_time.time()</span>
 <span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Stability map computed in </span><span class="sc">{</span>toc <span class="op">-</span> tic<span class="sc">:.1f}</span><span class="ss"> seconds"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Stability map computed in 0.2 seconds</code></pre>
+<pre><code>Stability map computed in 0.3 seconds</code></pre>
 </div>
 </div>
-<div id="f4f7e55f" class="cell" data-execution_count="7">
+<div id="b530ecb1" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>X, Y <span class="op">=</span> np.meshgrid(stab.timescale_grid, stab.sigma_grid)</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Set rescale_height=1.6 so that subplots are approximately square</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plm.subplots(<span class="dv">1</span>, <span class="dv">2</span>, sharex<span class="op">=</span><span class="va">True</span>, sharey<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">1.6</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plm.subplots(<span class="dv">1</span>, <span class="dv">2</span>, sharex<span class="op">=</span><span class="va">True</span>, sharey<span class="op">=</span><span class="va">True</span>, rescale_height<span class="op">=</span><span class="fl">1.5</span>)</span>
 <span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>im0 <span class="op">=</span> axes[<span class="dv">0</span>].pcolormesh(X, Y, stab.z_score, shading<span class="op">=</span><span class="st">"auto"</span>, cmap<span class="op">=</span><span class="st">"viridis"</span>)</span>
 <span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">"Peak Z-score"</span>)</span>
@@ -641,7 +641,7 @@ Recovered GP parameters: {'period': np.float64(4.843370086714427), 'sigma': np.f
 <section id="vetting-policy" class="level2">
 <h2 class="anchored" data-anchor-id="vetting-policy">Vetting Policy</h2>
 <p>We can use <code>TransitVettingPolicy</code> to ensure the detection crosses our significance threshold and hasn’t been absorbed by the GP.</p>
-<div id="9856d48d" class="cell" data-execution_count="8">
+<div id="529dbc38" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>policy <span class="op">=</span> TransitVettingPolicy(z_threshold<span class="op">=</span><span class="fl">4.0</span>, recovery_fraction_cutoff<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>verdict <span class="op">=</span> policy.validate(retr, injected_time<span class="op">=</span>planet_params[<span class="st">"epoch"</span>])</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
