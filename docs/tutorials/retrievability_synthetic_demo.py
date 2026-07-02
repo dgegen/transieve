@@ -134,7 +134,7 @@ axes[1].axvspan(
 )
 axes[1].set_ylabel("Z-score")
 axes[1].axhline(0, color="gray", ls="-", alpha=0.5, lw=0.8)
-axes[1].axhline(5, color="red", lw=1.2, ls="--", label=r"5$\sigma$ Threshold")
+axes[1].axhline(4, color="red", lw=1.2, ls="--", label=r"4$\sigma$ Threshold")
 axes[1].set_xlabel("Template epoch [days]")
 axes[1].legend(loc="upper right")
 
@@ -176,7 +176,7 @@ print(f"Stability map computed in {toc - tic:.1f} seconds")
 X, Y = np.meshgrid(stab.timescale_grid, stab.sigma_grid)
 
 # Set rescale_height=1.6 so that subplots are approximately square
-fig, axes = plm.subplots(1, 2, sharex=True, sharey=True, rescale_height=1.6)
+fig, axes = plm.subplots(1, 2, sharex=True, sharey=True, rescale_height=1.5)
 
 im0 = axes[0].pcolormesh(X, Y, stab.z_score, shading="auto", cmap="viridis")
 axes[0].set_title("Peak Z-score")
