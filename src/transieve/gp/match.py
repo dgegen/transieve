@@ -683,7 +683,11 @@ class SearchProfile:
         else:
             if hasattr(axes, "figure"):
                 fig = axes.figure
-            elif isinstance(axes, (list, np.ndarray)) and len(axes) > 0 and hasattr(axes[0], "figure"):
+            elif (
+                isinstance(axes, (list, np.ndarray))
+                and len(axes) > 0
+                and hasattr(axes[0], "figure")
+            ):
                 fig = axes[0].figure
             else:
                 fig = plt.gcf()

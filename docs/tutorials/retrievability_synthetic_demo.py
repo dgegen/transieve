@@ -115,13 +115,23 @@ fig, axes = plm.subplots(2, 1, sharex=True, rescale_height=0.6)
 # Plot flux with highlighted transit
 axes[0].plot(time, flux, marker=".", ls="", color="C0", alpha=0.5, ms=3, label="Flux")
 axes[0].axvline(peak_time, color="C3", ls=":", alpha=0.8)
-axes[0].axvspan(peak_time - planet_params["duration"] / 2, peak_time + planet_params["duration"] / 2, color="C3", alpha=0.1)
+axes[0].axvspan(
+    peak_time - planet_params["duration"] / 2,
+    peak_time + planet_params["duration"] / 2,
+    color="C3",
+    alpha=0.1,
+)
 axes[0].set_ylabel("Relative Flux")
 
 # Plot Z-score timeline
 axes[1].plot(retr.time, retr.z_score, color="C0", lw=1.2)
 axes[1].axvline(peak_time, color="C3", ls=":", alpha=0.8)
-axes[1].axvspan(peak_time - planet_params["duration"] / 2, peak_time + planet_params["duration"] / 2, color="C3", alpha=0.1)
+axes[1].axvspan(
+    peak_time - planet_params["duration"] / 2,
+    peak_time + planet_params["duration"] / 2,
+    color="C3",
+    alpha=0.1,
+)
 axes[1].set_ylabel("Z-score")
 axes[1].axhline(0, color="gray", ls="-", alpha=0.5, lw=0.8)
 axes[1].axhline(5, color="red", lw=1.2, ls="--", label=r"5$\sigma$ Threshold")
